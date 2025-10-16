@@ -10,7 +10,7 @@
 #include "esp_system.h"
 #include "nvs_flash.h"
 #include "include/protocol.h"
-#include "include/hpc_mqtt.h"
+#include "include/mqtt.h"
 
 // test_decoder disabled
 

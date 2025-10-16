@@ -1,7 +1,6 @@
-#include "include/hpc_mqtt.h"
+#include "include/mqtt.h"
 #include "esp_log.h"
 #include <stdio.h>
-#include <string.h>
 
 static const char *TAG = "HPC_MQTT";
 

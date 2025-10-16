@@ -7,8 +7,8 @@
  * Based on HeishaMon decode.cpp implementation
  */
 
-#include "include/decoder.h"
-#include "include/protocol.h"
+#include "decoder.h"
+#include "protocol.h"
 #include "esp_log.h"
 #include "string.h"
 #include "stdio.h"
@@ -16,13 +16,14 @@
 #include "esp_timer.h"
 #include <stdint.h>
 
+
 static const char *TAG = "DECODER_NEW";
 // Global decoded data structure
 hp_decoder_data_t g_decoded_data;
 
-// Byte offsets (direct indices into g_protocol_rx_buffer) - removed, using OFFS_* below
+// Byte offsets (direct indices into g_protocol_rx.data) - removed, using OFFS_* below
 
-// Field-oriented byte offsets (direct indices into g_protocol_rx_buffer)
+// Field-oriented byte offsets (direct indices into g_protocol_rx.data)
 #define OFFS_HEATPUMP_STATE                 4
 #define OFFS_PUMP_FLOW_HL                   4 /* uses bytes 0-1 */
 #define OFFS_FORCE_DHW_STATE                4
@@ -166,11 +167,23 @@ hp_decoder_data_t g_decoded_data;
 #define OFFS_XTOP_COOL_POWER_PRODUCTION_EXTRA     22
 #define OFFS_XTOP_DHW_POWER_PRODUCTION_EXTRA      24
 
+#define OFFS_OPERATIONS_HOURS                     182
+#define OFFS_OPERATIONS_COUNTER                   179
+#define OFFS_ROOM_HEATER_OPERATIONS_HOURS         185
+#define OFFS_DHW_HEATER_OPERATIONS_HOURS          188
+#define OFFS_MAIN_INLET_FRACTIONAL_TEMP           118
+#define OFFS_MAIN_OUTLET_FRACTIONAL_TEMP          118
+#define OFFS_PUMP_FLOW                            170
+#define OFFS_PUMP_FLOW_FRACTIONAL                 169
+#define OFFS_ERROR_TYPE                           113
+#define OFFS_ERROR_NUMBER                         114
+
 // Optional PCB data offset (from data[4])
 #define OFFS_OPT_PCB_DATA                         4
-// Direct numeric decode functions (optimized - no string conversion)
-static int16_t getIntMinus128(uint8_t input) {
-    return (int16_t)input - 128;
+
+// Direct numeric decode functions
+static int8_t getIntMinus128(uint8_t input) {
+    return input - 128;
 }
 
 static int16_t getIntMinus1(uint8_t input) {
@@ -238,19 +251,20 @@ static uint16_t getPower(uint8_t input) {
 }
 
 static uint16_t getUint16(uint8_t addr) {
-    return ((g_protocol_rx_buffer[addr + 1] << 8) | g_protocol_rx_buffer[addr]) - 1;
+    return ((g_protocol_rx.data[addr + 1] << 8) | g_protocol_rx.data[addr]) - 1;
 }
 
 // static uint16_t getPumpFlow() {
 //     // HeishaMon algorithm: PumpFlow1 + PumpFlow2
-//     int PumpFlow1 = (int)g_protocol_rx_buffer[170];
-//     float PumpFlow2 = (((float)g_protocol_rx_buffer[169] - 1) / 256);
+//     int PumpFlow1 = (int)g_protocol_rx.data[170];
+//     float PumpFlow2 = (((float)g_protocol_rx.data[169] - 1) / 256);
 //     float PumpFlow = PumpFlow1 + PumpFlow2;
 //     return (uint16_t)(PumpFlow * 100); // Return as l/min * 100
 // }
 
 static uint16_t getPumpFlow() {
-    return (uint16_t)g_protocol_rx_buffer[170] * 100 + ((uint16_t)g_protocol_rx_buffer[169] - 1) * 100 / 256; // Return as l/min * 100
+    // return (uint16_t)g_protocol_rx.data[170] * 100 + ((uint16_t)g_protocol_rx.data[169] - 1) * 100 / 256; // Return as l/min * 100
+    return (uint16_t)g_protocol_rx.data[OFFS_PUMP_FLOW] * 100 + ((uint16_t)g_protocol_rx.data[OFFS_PUMP_FLOW_FRACTIONAL] - 1) * 100 / 256; // Return as l/min * 100
 }
 
 static uint8_t getOpMode(uint8_t input) {
@@ -290,202 +304,200 @@ esp_err_t decode_main_data(void) {
     
     // Temperatures (stored as int16_t * 100, e.g. 25.5°C = 2550)
     // Handle special cases with fractional parts
-    uint8_t input_byte = g_protocol_rx_buffer[OFFS_MAIN_INLET_TEMP];
-    g_decoded_data.main_inlet_temp = getIntMinus128(input_byte) * 100;
-    int fractional = (int)(g_protocol_rx_buffer[118] & 0b111);
+    g_decoded_data.main_inlet_temp = getIntMinus128(g_protocol_rx.data[OFFS_MAIN_INLET_TEMP]) * 100;
+    int fractional = (int)(g_protocol_rx.data[OFFS_MAIN_INLET_FRACTIONAL_TEMP] & 0b111);
     if (fractional > 1 && fractional < 5) {
         g_decoded_data.main_inlet_temp += (fractional - 1) * 25;
     }
     
-    input_byte = g_protocol_rx_buffer[OFFS_MAIN_OUTLET_TEMP];
-    g_decoded_data.main_outlet_temp = getIntMinus128(input_byte) * 100;
-    fractional = (int)((g_protocol_rx_buffer[118] >> 3) & 0b111);
+    g_decoded_data.main_outlet_temp = getIntMinus128(g_protocol_rx.data[OFFS_MAIN_OUTLET_TEMP]) * 100;
+    fractional = (int)((g_protocol_rx.data[OFFS_MAIN_OUTLET_FRACTIONAL_TEMP] >> 3) & 0b111);
     if (fractional > 1 && fractional < 5) {
         g_decoded_data.main_outlet_temp += (fractional - 1) * 25;
     }
     
-    g_decoded_data.main_target_temp = getIntMinus128(g_protocol_rx_buffer[OFFS_MAIN_TARGET_TEMP]) * 100;
-    g_decoded_data.dhw_temp = getIntMinus128(g_protocol_rx_buffer[OFFS_DHW_TEMP]) * 100;
-    g_decoded_data.dhw_target_temp = getIntMinus128(g_protocol_rx_buffer[OFFS_DHW_TARGET_TEMP]) * 100;
-    g_decoded_data.outside_temp = getIntMinus128(g_protocol_rx_buffer[OFFS_OUTSIDE_TEMP]) * 100;
-    g_decoded_data.room_thermostat_temp = getIntMinus128(g_protocol_rx_buffer[OFFS_ROOM_THERMOSTAT_TEMP]) * 100;
-    g_decoded_data.buffer_temp = getIntMinus128(g_protocol_rx_buffer[OFFS_BUFFER_TEMP]) * 100;
-    g_decoded_data.solar_temp = getIntMinus128(g_protocol_rx_buffer[OFFS_SOLAR_TEMP]) * 100;
-    g_decoded_data.pool_temp = getIntMinus128(g_protocol_rx_buffer[OFFS_POOL_TEMP]) * 100;
+    g_decoded_data.main_target_temp = getIntMinus128(g_protocol_rx.data[OFFS_MAIN_TARGET_TEMP]);
+    g_decoded_data.dhw_temp = getIntMinus128(g_protocol_rx.data[OFFS_DHW_TEMP]);
+    g_decoded_data.dhw_target_temp = getIntMinus128(g_protocol_rx.data[OFFS_DHW_TARGET_TEMP]);
+    g_decoded_data.outside_temp = getIntMinus128(g_protocol_rx.data[OFFS_OUTSIDE_TEMP]);
+    g_decoded_data.room_thermostat_temp = getIntMinus128(g_protocol_rx.data[OFFS_ROOM_THERMOSTAT_TEMP]);
+    g_decoded_data.buffer_temp = getIntMinus128(g_protocol_rx.data[OFFS_BUFFER_TEMP]);
+    g_decoded_data.solar_temp = getIntMinus128(g_protocol_rx.data[OFFS_SOLAR_TEMP]);
+    g_decoded_data.pool_temp = getIntMinus128(g_protocol_rx.data[OFFS_POOL_TEMP]);
     
     // Power values
-    g_decoded_data.heat_power_production = getPower(g_protocol_rx_buffer[OFFS_HEAT_POWER_PRODUCTION]);
-    g_decoded_data.heat_power_consumption = getPower(g_protocol_rx_buffer[OFFS_HEAT_POWER_CONSUMPTION]);
-    g_decoded_data.cool_power_production = getPower(g_protocol_rx_buffer[OFFS_COOL_POWER_PRODUCTION]);
-    g_decoded_data.cool_power_consumption = getPower(g_protocol_rx_buffer[OFFS_COOL_POWER_CONSUMPTION]);
-    g_decoded_data.dhw_power_production = getPower(g_protocol_rx_buffer[OFFS_DHW_POWER_PRODUCTION]);
-    g_decoded_data.dhw_power_consumption = getPower(g_protocol_rx_buffer[OFFS_DHW_POWER_CONSUMPTION]);
+    g_decoded_data.heat_power_production = getPower(g_protocol_rx.data[OFFS_HEAT_POWER_PRODUCTION]);
+    g_decoded_data.heat_power_consumption = getPower(g_protocol_rx.data[OFFS_HEAT_POWER_CONSUMPTION]);
+    g_decoded_data.cool_power_production = getPower(g_protocol_rx.data[OFFS_COOL_POWER_PRODUCTION]);
+    g_decoded_data.cool_power_consumption = getPower(g_protocol_rx.data[OFFS_COOL_POWER_CONSUMPTION]);
+    g_decoded_data.dhw_power_production = getPower(g_protocol_rx.data[OFFS_DHW_POWER_PRODUCTION]);
+    g_decoded_data.dhw_power_consumption = getPower(g_protocol_rx.data[OFFS_DHW_POWER_CONSUMPTION]);
     
     // Operation states
-    g_decoded_data.heatpump_state = getBit7and8(g_protocol_rx_buffer[OFFS_HEATPUMP_STATE]);
-    g_decoded_data.force_dhw_state = getBit1and2(g_protocol_rx_buffer[OFFS_FORCE_DHW_STATE]);
-    g_decoded_data.operating_mode_state = getOpMode(g_protocol_rx_buffer[OFFS_OPERATING_MODE_STATE]);
-    g_decoded_data.quiet_mode_schedule = getBit1and2(g_protocol_rx_buffer[OFFS_QUIET_MODE_SCHEDULE]);
-    g_decoded_data.powerful_mode_time = getRight3bits(g_protocol_rx_buffer[OFFS_POWERFUL_MODE_TIME]);
-    g_decoded_data.quiet_mode_level = getBit3and4and5(g_protocol_rx_buffer[OFFS_QUIET_MODE_LEVEL]);
-    g_decoded_data.holiday_mode_state = getBit3and4(g_protocol_rx_buffer[OFFS_HOLIDAY_MODE_STATE]);
-    g_decoded_data.three_way_valve_state = getBit7and8(g_protocol_rx_buffer[OFFS_THREE_WAY_VALVE_STATE]);
-    g_decoded_data.defrosting_state = getBit5and6(g_protocol_rx_buffer[OFFS_DEFROSTING_STATE]);
-    g_decoded_data.zones_state = getBit1and2(g_protocol_rx_buffer[OFFS_ZONES_STATE]);
+    g_decoded_data.heatpump_state = getBit7and8(g_protocol_rx.data[OFFS_HEATPUMP_STATE]);
+    g_decoded_data.force_dhw_state = getBit1and2(g_protocol_rx.data[OFFS_FORCE_DHW_STATE]);
+    g_decoded_data.operating_mode_state = getOpMode(g_protocol_rx.data[OFFS_OPERATING_MODE_STATE]);
+    g_decoded_data.quiet_mode_schedule = getBit1and2(g_protocol_rx.data[OFFS_QUIET_MODE_SCHEDULE]);
+    g_decoded_data.powerful_mode_time = getRight3bits(g_protocol_rx.data[OFFS_POWERFUL_MODE_TIME]);
+    g_decoded_data.quiet_mode_level = getBit3and4and5(g_protocol_rx.data[OFFS_QUIET_MODE_LEVEL]);
+    g_decoded_data.holiday_mode_state = getBit3and4(g_protocol_rx.data[OFFS_HOLIDAY_MODE_STATE]);
+    g_decoded_data.three_way_valve_state = getBit7and8(g_protocol_rx.data[OFFS_THREE_WAY_VALVE_STATE]);
+    g_decoded_data.defrosting_state = getBit5and6(g_protocol_rx.data[OFFS_DEFROSTING_STATE]);
+    g_decoded_data.zones_state = getBit1and2(g_protocol_rx.data[OFFS_ZONES_STATE]);
     
-    // Technical parameters - using universal decoder
-    g_decoded_data.compressor_freq = getIntMinus1(g_protocol_rx_buffer[OFFS_COMPRESSOR_FREQ]);
+    // Technical parameters
+    g_decoded_data.compressor_freq = getIntMinus1(g_protocol_rx.data[OFFS_COMPRESSOR_FREQ]);
     g_decoded_data.pump_flow = getPumpFlow(); // Special case - needs full function
-    g_decoded_data.operations_hours = (uint16_t)(((g_protocol_rx_buffer[183] << 8) | g_protocol_rx_buffer[182]) - 1);
-    g_decoded_data.operations_counter = (uint16_t)(((g_protocol_rx_buffer[180] << 8) | g_protocol_rx_buffer[179]) - 1);
+    g_decoded_data.operations_hours = getUint16(OFFS_OPERATIONS_HOURS);
+    g_decoded_data.operations_counter = getUint16(OFFS_OPERATIONS_COUNTER);
     
     // Additional temperatures (stored as int16_t * 100) — direct decoding
-    g_decoded_data.main_hex_outlet_temp = getIntMinus128(g_protocol_rx_buffer[OFFS_MAIN_HEX_OUTLET_TEMP]) * 100;
-    g_decoded_data.discharge_temp = getIntMinus128(g_protocol_rx_buffer[OFFS_DISCHARGE_TEMP]) * 100;
-    g_decoded_data.inside_pipe_temp = getIntMinus128(g_protocol_rx_buffer[OFFS_INSIDE_PIPE_TEMP]) * 100;
-    g_decoded_data.defrost_temp = getIntMinus128(g_protocol_rx_buffer[OFFS_DEFROST_TEMP]) * 100;
-    g_decoded_data.eva_outlet_temp = getIntMinus128(g_protocol_rx_buffer[OFFS_EVA_OUTLET_TEMP]) * 100;
-    g_decoded_data.bypass_outlet_temp = getIntMinus128(g_protocol_rx_buffer[OFFS_BYPASS_OUTLET_TEMP]) * 100;
-    g_decoded_data.ipm_temp = getIntMinus128(g_protocol_rx_buffer[OFFS_IPM_TEMP]) * 100;
-    g_decoded_data.outside_pipe_temp = getIntMinus128(g_protocol_rx_buffer[OFFS_OUTSIDE_PIPE_TEMP]) * 100;
-    g_decoded_data.z1_temp = getIntMinus128(g_protocol_rx_buffer[OFFS_Z1_TEMP]) * 100;
-    g_decoded_data.z2_temp = getIntMinus128(g_protocol_rx_buffer[OFFS_Z2_TEMP]) * 100;
-    g_decoded_data.z1_water_temp = getIntMinus128(g_protocol_rx_buffer[OFFS_Z1_WATER_TEMP]) * 100;
-    g_decoded_data.z2_water_temp = getIntMinus128(g_protocol_rx_buffer[OFFS_Z2_WATER_TEMP]) * 100;
-    g_decoded_data.z1_water_target_temp = getIntMinus128(g_protocol_rx_buffer[OFFS_Z1_WATER_TARGET_TEMP]) * 100;
-    g_decoded_data.z2_water_target_temp = getIntMinus128(g_protocol_rx_buffer[OFFS_Z2_WATER_TARGET_TEMP]) * 100;
-    g_decoded_data.second_inlet_temp = getIntMinus128(g_protocol_rx_buffer[OFFS_SECOND_INLET_TEMP]) * 100;
-    g_decoded_data.economizer_outlet_temp = getIntMinus128(g_protocol_rx_buffer[OFFS_ECONOMIZER_OUTLET_TEMP]) * 100;
-    g_decoded_data.second_room_thermostat_temp = getIntMinus128(g_protocol_rx_buffer[OFFS_SECOND_ROOM_THERMOSTAT_TEMP]) * 100;
+    g_decoded_data.main_hex_outlet_temp = getIntMinus128(g_protocol_rx.data[OFFS_MAIN_HEX_OUTLET_TEMP]);
+    g_decoded_data.discharge_temp = getIntMinus128(g_protocol_rx.data[OFFS_DISCHARGE_TEMP]);
+    g_decoded_data.inside_pipe_temp = getIntMinus128(g_protocol_rx.data[OFFS_INSIDE_PIPE_TEMP]);
+    g_decoded_data.defrost_temp = getIntMinus128(g_protocol_rx.data[OFFS_DEFROST_TEMP]);
+    g_decoded_data.eva_outlet_temp = getIntMinus128(g_protocol_rx.data[OFFS_EVA_OUTLET_TEMP]);
+    g_decoded_data.bypass_outlet_temp = getIntMinus128(g_protocol_rx.data[OFFS_BYPASS_OUTLET_TEMP]);
+    g_decoded_data.ipm_temp = getIntMinus128(g_protocol_rx.data[OFFS_IPM_TEMP]);
+    g_decoded_data.outside_pipe_temp = getIntMinus128(g_protocol_rx.data[OFFS_OUTSIDE_PIPE_TEMP]);
+    g_decoded_data.z1_temp = getIntMinus128(g_protocol_rx.data[OFFS_Z1_TEMP]);
+    g_decoded_data.z2_temp = getIntMinus128(g_protocol_rx.data[OFFS_Z2_TEMP]);
+    g_decoded_data.z1_water_temp = getIntMinus128(g_protocol_rx.data[OFFS_Z1_WATER_TEMP]);
+    g_decoded_data.z2_water_temp = getIntMinus128(g_protocol_rx.data[OFFS_Z2_WATER_TEMP]);
+    g_decoded_data.z1_water_target_temp = getIntMinus128(g_protocol_rx.data[OFFS_Z1_WATER_TARGET_TEMP]);
+    g_decoded_data.z2_water_target_temp = getIntMinus128(g_protocol_rx.data[OFFS_Z2_WATER_TARGET_TEMP]);
+    g_decoded_data.second_inlet_temp = getIntMinus128(g_protocol_rx.data[OFFS_SECOND_INLET_TEMP]);
+    g_decoded_data.economizer_outlet_temp = getIntMinus128(g_protocol_rx.data[OFFS_ECONOMIZER_OUTLET_TEMP]);
+    g_decoded_data.second_room_thermostat_temp = getIntMinus128(g_protocol_rx.data[OFFS_SECOND_ROOM_THERMOSTAT_TEMP]);
     
     
     // Zone request temperatures (stored as int16_t * 100) — direct decoding
-    g_decoded_data.z1_heat_request_temp = getIntMinus128(g_protocol_rx_buffer[OFFS_Z1_HEAT_REQUEST_TEMP]) * 100;
-    g_decoded_data.z1_cool_request_temp = getIntMinus128(g_protocol_rx_buffer[OFFS_Z1_COOL_REQUEST_TEMP]) * 100;
-    g_decoded_data.z2_heat_request_temp = getIntMinus128(g_protocol_rx_buffer[OFFS_Z2_HEAT_REQUEST_TEMP]) * 100;
-    g_decoded_data.z2_cool_request_temp = getIntMinus128(g_protocol_rx_buffer[OFFS_Z2_COOL_REQUEST_TEMP]) * 100;
+    g_decoded_data.z1_heat_request_temp = getIntMinus128(g_protocol_rx.data[OFFS_Z1_HEAT_REQUEST_TEMP]);
+    g_decoded_data.z1_cool_request_temp = getIntMinus128(g_protocol_rx.data[OFFS_Z1_COOL_REQUEST_TEMP]);
+    g_decoded_data.z2_heat_request_temp = getIntMinus128(g_protocol_rx.data[OFFS_Z2_HEAT_REQUEST_TEMP]);
+    g_decoded_data.z2_cool_request_temp = getIntMinus128(g_protocol_rx.data[OFFS_Z2_COOL_REQUEST_TEMP]);
     
     // Zone curve settings (stored as int16_t * 100) — direct decoding
-    g_decoded_data.z1_heat_curve_target_high_temp = getIntMinus128(g_protocol_rx_buffer[OFFS_Z1_HEAT_CURVE_TARGET_HIGH]) * 100;
-    g_decoded_data.z1_heat_curve_target_low_temp = getIntMinus128(g_protocol_rx_buffer[OFFS_Z1_HEAT_CURVE_TARGET_LOW]) * 100;
-    g_decoded_data.z1_heat_curve_outside_high_temp = getIntMinus128(g_protocol_rx_buffer[OFFS_Z1_HEAT_CURVE_OUTSIDE_HIGH]) * 100;
-    g_decoded_data.z1_heat_curve_outside_low_temp = getIntMinus128(g_protocol_rx_buffer[OFFS_Z1_HEAT_CURVE_OUTSIDE_LOW]) * 100;
-    g_decoded_data.z1_cool_curve_target_high_temp = getIntMinus128(g_protocol_rx_buffer[OFFS_Z1_COOL_CURVE_TARGET_HIGH]) * 100;
-    g_decoded_data.z1_cool_curve_target_low_temp = getIntMinus128(g_protocol_rx_buffer[OFFS_Z1_COOL_CURVE_TARGET_LOW]) * 100;
-    g_decoded_data.z1_cool_curve_outside_high_temp = getIntMinus128(g_protocol_rx_buffer[OFFS_Z1_COOL_CURVE_OUTSIDE_HIGH]) * 100;
-    g_decoded_data.z1_cool_curve_outside_low_temp = getIntMinus128(g_protocol_rx_buffer[OFFS_Z1_COOL_CURVE_OUTSIDE_LOW]) * 100;
-    g_decoded_data.z2_heat_curve_target_high_temp = getIntMinus128(g_protocol_rx_buffer[OFFS_Z2_HEAT_CURVE_TARGET_HIGH]) * 100;
-    g_decoded_data.z2_heat_curve_target_low_temp = getIntMinus128(g_protocol_rx_buffer[OFFS_Z2_HEAT_CURVE_TARGET_LOW]) * 100;
-    g_decoded_data.z2_heat_curve_outside_high_temp = getIntMinus128(g_protocol_rx_buffer[OFFS_Z2_HEAT_CURVE_OUTSIDE_HIGH]) * 100;
-    g_decoded_data.z2_heat_curve_outside_low_temp = getIntMinus128(g_protocol_rx_buffer[OFFS_Z2_HEAT_CURVE_OUTSIDE_LOW]) * 100;
-    g_decoded_data.z2_cool_curve_target_high_temp = getIntMinus128(g_protocol_rx_buffer[OFFS_Z2_COOL_CURVE_TARGET_HIGH]) * 100;
-    g_decoded_data.z2_cool_curve_target_low_temp = getIntMinus128(g_protocol_rx_buffer[OFFS_Z2_COOL_CURVE_TARGET_LOW]) * 100;
-    g_decoded_data.z2_cool_curve_outside_high_temp = getIntMinus128(g_protocol_rx_buffer[OFFS_Z2_COOL_CURVE_OUTSIDE_HIGH]) * 100;
-    g_decoded_data.z2_cool_curve_outside_low_temp = getIntMinus128(g_protocol_rx_buffer[OFFS_Z2_COOL_CURVE_OUTSIDE_LOW]) * 100;
+    g_decoded_data.z1_heat_curve_target_high_temp = getIntMinus128(g_protocol_rx.data[OFFS_Z1_HEAT_CURVE_TARGET_HIGH]);
+    g_decoded_data.z1_heat_curve_target_low_temp = getIntMinus128(g_protocol_rx.data[OFFS_Z1_HEAT_CURVE_TARGET_LOW]);
+    g_decoded_data.z1_heat_curve_outside_high_temp = getIntMinus128(g_protocol_rx.data[OFFS_Z1_HEAT_CURVE_OUTSIDE_HIGH]);
+    g_decoded_data.z1_heat_curve_outside_low_temp = getIntMinus128(g_protocol_rx.data[OFFS_Z1_HEAT_CURVE_OUTSIDE_LOW]);
+    g_decoded_data.z1_cool_curve_target_high_temp = getIntMinus128(g_protocol_rx.data[OFFS_Z1_COOL_CURVE_TARGET_HIGH]);
+    g_decoded_data.z1_cool_curve_target_low_temp = getIntMinus128(g_protocol_rx.data[OFFS_Z1_COOL_CURVE_TARGET_LOW]);
+    g_decoded_data.z1_cool_curve_outside_high_temp = getIntMinus128(g_protocol_rx.data[OFFS_Z1_COOL_CURVE_OUTSIDE_HIGH]);
+    g_decoded_data.z1_cool_curve_outside_low_temp = getIntMinus128(g_protocol_rx.data[OFFS_Z1_COOL_CURVE_OUTSIDE_LOW]);
+    g_decoded_data.z2_heat_curve_target_high_temp = getIntMinus128(g_protocol_rx.data[OFFS_Z2_HEAT_CURVE_TARGET_HIGH]);
+    g_decoded_data.z2_heat_curve_target_low_temp = getIntMinus128(g_protocol_rx.data[OFFS_Z2_HEAT_CURVE_TARGET_LOW]);
+    g_decoded_data.z2_heat_curve_outside_high_temp = getIntMinus128(g_protocol_rx.data[OFFS_Z2_HEAT_CURVE_OUTSIDE_HIGH]);
+    g_decoded_data.z2_heat_curve_outside_low_temp = getIntMinus128(g_protocol_rx.data[OFFS_Z2_HEAT_CURVE_OUTSIDE_LOW]);
+    g_decoded_data.z2_cool_curve_target_high_temp = getIntMinus128(g_protocol_rx.data[OFFS_Z2_COOL_CURVE_TARGET_HIGH]);
+    g_decoded_data.z2_cool_curve_target_low_temp = getIntMinus128(g_protocol_rx.data[OFFS_Z2_COOL_CURVE_TARGET_LOW]);
+    g_decoded_data.z2_cool_curve_outside_high_temp = getIntMinus128(g_protocol_rx.data[OFFS_Z2_COOL_CURVE_OUTSIDE_HIGH]);
+    g_decoded_data.z2_cool_curve_outside_low_temp = getIntMinus128(g_protocol_rx.data[OFFS_Z2_COOL_CURVE_OUTSIDE_LOW]);
     
     // Additional operation states — direct decoding
-    g_decoded_data.main_schedule_state = getBit1and2(g_protocol_rx_buffer[OFFS_MAIN_SCHEDULE_STATE]);
+    g_decoded_data.main_schedule_state = getBit1and2(g_protocol_rx.data[OFFS_MAIN_SCHEDULE_STATE]);
     
     // Technical parameters — direct decoding
-    g_decoded_data.fan1_motor_speed = getIntMinus1Times10(g_protocol_rx_buffer[OFFS_FAN1_MOTOR_SPEED]);
-    g_decoded_data.fan2_motor_speed = getIntMinus1Times10(g_protocol_rx_buffer[OFFS_FAN2_MOTOR_SPEED]);
-    g_decoded_data.high_pressure = getIntMinus1Div5(g_protocol_rx_buffer[OFFS_HIGH_PRESSURE]);
-    g_decoded_data.pump_speed = getIntMinus1Times50(g_protocol_rx_buffer[OFFS_PUMP_SPEED]);
-    g_decoded_data.low_pressure = getIntMinus1Times50(g_protocol_rx_buffer[OFFS_LOW_PRESSURE]);
-    g_decoded_data.compressor_current = getIntMinus1Div5(g_protocol_rx_buffer[OFFS_COMPRESSOR_CURRENT]);
-    g_decoded_data.pump_duty = getIntMinus1(g_protocol_rx_buffer[OFFS_PUMP_DUTY]);
-    g_decoded_data.max_pump_duty = getIntMinus1(g_protocol_rx_buffer[OFFS_MAX_PUMP_DUTY]);
+    g_decoded_data.fan1_motor_speed = getIntMinus1Times10(g_protocol_rx.data[OFFS_FAN1_MOTOR_SPEED]);
+    g_decoded_data.fan2_motor_speed = getIntMinus1Times10(g_protocol_rx.data[OFFS_FAN2_MOTOR_SPEED]);
+    g_decoded_data.high_pressure = getIntMinus1Div5(g_protocol_rx.data[OFFS_HIGH_PRESSURE]);
+    g_decoded_data.pump_speed = getIntMinus1Times50(g_protocol_rx.data[OFFS_PUMP_SPEED]);
+    g_decoded_data.low_pressure = getIntMinus1Times50(g_protocol_rx.data[OFFS_LOW_PRESSURE]);
+    g_decoded_data.compressor_current = getIntMinus1Div5(g_protocol_rx.data[OFFS_COMPRESSOR_CURRENT]);
+    g_decoded_data.pump_duty = getIntMinus1(g_protocol_rx.data[OFFS_PUMP_DUTY]);
+    g_decoded_data.max_pump_duty = getIntMinus1(g_protocol_rx.data[OFFS_MAX_PUMP_DUTY]);
     
     // Heater states — direct decoding
-    g_decoded_data.dhw_heater_state = getBit5and6(g_protocol_rx_buffer[OFFS_DHW_HEATER_STATE]);
-    g_decoded_data.room_heater_state = getBit7and8(g_protocol_rx_buffer[OFFS_ROOM_HEATER_STATE]);
-    g_decoded_data.internal_heater_state = getBit7and8(g_protocol_rx_buffer[OFFS_INTERNAL_HEATER_STATE]);
-    g_decoded_data.external_heater_state = getBit5and6(g_protocol_rx_buffer[OFFS_EXTERNAL_HEATER_STATE]);
-    g_decoded_data.force_heater_state = getBit5and6(g_protocol_rx_buffer[OFFS_FORCE_HEATER_STATE]);
-    g_decoded_data.sterilization_state = getBit5and6(g_protocol_rx_buffer[OFFS_STERILIZATION_STATE]);
-    g_decoded_data.sterilization_temp = getIntMinus128(g_protocol_rx_buffer[OFFS_STERILIZATION_TEMP]) * 100;
-    g_decoded_data.sterilization_max_time = getIntMinus1(g_protocol_rx_buffer[OFFS_STERILIZATION_MAX_TIME]);
+    g_decoded_data.dhw_heater_state = getBit5and6(g_protocol_rx.data[OFFS_DHW_HEATER_STATE]);
+    g_decoded_data.room_heater_state = getBit7and8(g_protocol_rx.data[OFFS_ROOM_HEATER_STATE]);
+    g_decoded_data.internal_heater_state = getBit7and8(g_protocol_rx.data[OFFS_INTERNAL_HEATER_STATE]);
+    g_decoded_data.external_heater_state = getBit5and6(g_protocol_rx.data[OFFS_EXTERNAL_HEATER_STATE]);
+    g_decoded_data.force_heater_state = getBit5and6(g_protocol_rx.data[OFFS_FORCE_HEATER_STATE]);
+    g_decoded_data.sterilization_state = getBit5and6(g_protocol_rx.data[OFFS_STERILIZATION_STATE]);
+    g_decoded_data.sterilization_temp = getIntMinus128(g_protocol_rx.data[OFFS_STERILIZATION_TEMP]);
+    g_decoded_data.sterilization_max_time = getIntMinus1(g_protocol_rx.data[OFFS_STERILIZATION_MAX_TIME]);
     
     // Deltas and shifts (stored as int16_t * 100) — direct decoding
-    g_decoded_data.dhw_heat_delta = getIntMinus128(g_protocol_rx_buffer[OFFS_DHW_HEAT_DELTA]) * 100;
-    g_decoded_data.heat_delta = getIntMinus128(g_protocol_rx_buffer[OFFS_HEAT_DELTA]) * 100;
-    g_decoded_data.cool_delta = getIntMinus128(g_protocol_rx_buffer[OFFS_COOL_DELTA]) * 100;
-    g_decoded_data.dhw_holiday_shift_temp = getIntMinus128(g_protocol_rx_buffer[OFFS_DHW_HOLIDAY_SHIFT_TEMP]) * 100;
-    g_decoded_data.room_holiday_shift_temp = getIntMinus128(g_protocol_rx_buffer[OFFS_ROOM_HOLIDAY_SHIFT_TEMP]) * 100;
-    g_decoded_data.buffer_tank_delta = getIntMinus128(g_protocol_rx_buffer[OFFS_BUFFER_TANK_DELTA]) * 100;
+    g_decoded_data.dhw_heat_delta = getIntMinus128(g_protocol_rx.data[OFFS_DHW_HEAT_DELTA]);
+    g_decoded_data.heat_delta = getIntMinus128(g_protocol_rx.data[OFFS_HEAT_DELTA]);
+    g_decoded_data.cool_delta = getIntMinus128(g_protocol_rx.data[OFFS_COOL_DELTA]);
+    g_decoded_data.dhw_holiday_shift_temp = getIntMinus128(g_protocol_rx.data[OFFS_DHW_HOLIDAY_SHIFT_TEMP]);
+    g_decoded_data.room_holiday_shift_temp = getIntMinus128(g_protocol_rx.data[OFFS_ROOM_HOLIDAY_SHIFT_TEMP]);
+    g_decoded_data.buffer_tank_delta = getIntMinus128(g_protocol_rx.data[OFFS_BUFFER_TANK_DELTA]);
     
     // Mode settings — direct decoding
-    g_decoded_data.heating_mode = getBit7and8(g_protocol_rx_buffer[OFFS_HEATING_MODE]);
-    g_decoded_data.heating_off_outdoor_temp = getIntMinus128(g_protocol_rx_buffer[OFFS_HEATING_OFF_OUTDOOR_TEMP]) * 100;
-    g_decoded_data.heater_on_outdoor_temp = getIntMinus128(g_protocol_rx_buffer[OFFS_HEATER_ON_OUTDOOR_TEMP]) * 100;
-    g_decoded_data.heat_to_cool_temp = getIntMinus128(g_protocol_rx_buffer[OFFS_HEAT_TO_COOL_TEMP]) * 100;
-    g_decoded_data.cool_to_heat_temp = getIntMinus128(g_protocol_rx_buffer[OFFS_COOL_TO_HEAT_TEMP]) * 100;
-    g_decoded_data.cooling_mode = getBit5and6(g_protocol_rx_buffer[OFFS_COOLING_MODE]);
+    g_decoded_data.heating_mode = getBit7and8(g_protocol_rx.data[OFFS_HEATING_MODE]);
+    g_decoded_data.heating_off_outdoor_temp = getIntMinus128(g_protocol_rx.data[OFFS_HEATING_OFF_OUTDOOR_TEMP]);
+    g_decoded_data.heater_on_outdoor_temp = getIntMinus128(g_protocol_rx.data[OFFS_HEATER_ON_OUTDOOR_TEMP]);
+    g_decoded_data.heat_to_cool_temp = getIntMinus128(g_protocol_rx.data[OFFS_HEAT_TO_COOL_TEMP]);
+    g_decoded_data.cool_to_heat_temp = getIntMinus128(g_protocol_rx.data[OFFS_COOL_TO_HEAT_TEMP]);
+    g_decoded_data.cooling_mode = getBit5and6(g_protocol_rx.data[OFFS_COOLING_MODE]);
     
     // Solar and buffer settings — direct decoding
-    g_decoded_data.buffer_installed = getBit5and6(g_protocol_rx_buffer[OFFS_BUFFER_INSTALLED]);
-    g_decoded_data.dhw_installed = getBit7and8(g_protocol_rx_buffer[OFFS_DHW_INSTALLED]);
-    g_decoded_data.solar_mode = getBit3and4(g_protocol_rx_buffer[OFFS_SOLAR_MODE]);
-    g_decoded_data.solar_on_delta = getIntMinus128(g_protocol_rx_buffer[OFFS_SOLAR_ON_DELTA]) * 100;
-    g_decoded_data.solar_off_delta = getIntMinus128(g_protocol_rx_buffer[OFFS_SOLAR_OFF_DELTA]) * 100;
-    g_decoded_data.solar_frost_protection = getIntMinus128(g_protocol_rx_buffer[OFFS_SOLAR_FROST_PROTECTION]) * 100;
-    g_decoded_data.solar_high_limit = getIntMinus128(g_protocol_rx_buffer[OFFS_SOLAR_HIGH_LIMIT]) * 100;
+    g_decoded_data.buffer_installed = getBit5and6(g_protocol_rx.data[OFFS_BUFFER_INSTALLED]);
+    g_decoded_data.dhw_installed = getBit7and8(g_protocol_rx.data[OFFS_DHW_INSTALLED]);
+    g_decoded_data.solar_mode = getBit3and4(g_protocol_rx.data[OFFS_SOLAR_MODE]);
+    g_decoded_data.solar_on_delta = getIntMinus128(g_protocol_rx.data[OFFS_SOLAR_ON_DELTA]);
+    g_decoded_data.solar_off_delta = getIntMinus128(g_protocol_rx.data[OFFS_SOLAR_OFF_DELTA]);
+    g_decoded_data.solar_frost_protection = getIntMinus128(g_protocol_rx.data[OFFS_SOLAR_FROST_PROTECTION]);
+    g_decoded_data.solar_high_limit = getIntMinus128(g_protocol_rx.data[OFFS_SOLAR_HIGH_LIMIT]);
     
     // Pump and liquid settings — direct decoding
-    g_decoded_data.pump_flowrate_mode = getBit3and4(g_protocol_rx_buffer[OFFS_PUMP_FLOWRATE_MODE]);
-    g_decoded_data.liquid_type = getBit1(g_protocol_rx_buffer[OFFS_LIQUID_TYPE]);
-    g_decoded_data.alt_external_sensor = getBit3and4(g_protocol_rx_buffer[OFFS_ALT_EXTERNAL_SENSOR]);
-    g_decoded_data.anti_freeze_mode = getBit5and6(g_protocol_rx_buffer[OFFS_ANTI_FREEZE_MODE]);
-    g_decoded_data.optional_pcb = getBit7and8(g_protocol_rx_buffer[OFFS_OPTIONAL_PCB]);
+    g_decoded_data.pump_flowrate_mode = getBit3and4(g_protocol_rx.data[OFFS_PUMP_FLOWRATE_MODE]);
+    g_decoded_data.liquid_type = getBit1(g_protocol_rx.data[OFFS_LIQUID_TYPE]);
+    g_decoded_data.alt_external_sensor = getBit3and4(g_protocol_rx.data[OFFS_ALT_EXTERNAL_SENSOR]);
+    g_decoded_data.anti_freeze_mode = getBit5and6(g_protocol_rx.data[OFFS_ANTI_FREEZE_MODE]);
+    g_decoded_data.optional_pcb = getBit7and8(g_protocol_rx.data[OFFS_OPTIONAL_PCB]);
     
     // Zone sensor settings — direct decoding
-    g_decoded_data.z1_sensor_settings = getSecondByte(g_protocol_rx_buffer[OFFS_Z1_SENSOR_SETTINGS]);
-    g_decoded_data.z2_sensor_settings = getFirstByte(g_protocol_rx_buffer[OFFS_Z2_SENSOR_SETTINGS]);
+    g_decoded_data.z1_sensor_settings = getSecondByte(g_protocol_rx.data[OFFS_Z1_SENSOR_SETTINGS]);
+    g_decoded_data.z2_sensor_settings = getFirstByte(g_protocol_rx.data[OFFS_Z2_SENSOR_SETTINGS]);
     
     // External controls — direct decoding
-    g_decoded_data.external_pad_heater = getBit3and4(g_protocol_rx_buffer[OFFS_EXTERNAL_PAD_HEATER]);
-    g_decoded_data.water_pressure = getIntMinus1Div50(g_protocol_rx_buffer[OFFS_WATER_PRESSURE]);
-    g_decoded_data.external_control = getBit7and8(g_protocol_rx_buffer[OFFS_EXTERNAL_CONTROL]);
-    g_decoded_data.external_heat_cool_control = getBit5and6(g_protocol_rx_buffer[OFFS_EXTERNAL_HEAT_COOL_CONTROL]);
-    g_decoded_data.external_error_signal = getBit3and4(g_protocol_rx_buffer[OFFS_EXTERNAL_ERROR_SIGNAL]);
-    g_decoded_data.external_compressor_control = getBit1and2(g_protocol_rx_buffer[OFFS_EXTERNAL_COMPRESSOR_CONTROL]);
+    g_decoded_data.external_pad_heater = getBit3and4(g_protocol_rx.data[OFFS_EXTERNAL_PAD_HEATER]);
+    g_decoded_data.water_pressure = getIntMinus1Div50(g_protocol_rx.data[OFFS_WATER_PRESSURE]);
+    g_decoded_data.external_control = getBit7and8(g_protocol_rx.data[OFFS_EXTERNAL_CONTROL]);
+    g_decoded_data.external_heat_cool_control = getBit5and6(g_protocol_rx.data[OFFS_EXTERNAL_HEAT_COOL_CONTROL]);
+    g_decoded_data.external_error_signal = getBit3and4(g_protocol_rx.data[OFFS_EXTERNAL_ERROR_SIGNAL]);
+    g_decoded_data.external_compressor_control = getBit1and2(g_protocol_rx.data[OFFS_EXTERNAL_COMPRESSOR_CONTROL]);
     
     // Pump states — direct decoding
-    g_decoded_data.z2_pump_state = getBit1and2(g_protocol_rx_buffer[OFFS_Z2_PUMP_STATE]);
-    g_decoded_data.z1_pump_state = getBit3and4(g_protocol_rx_buffer[OFFS_Z1_PUMP_STATE]);
-    g_decoded_data.two_way_valve_state = getBit5and6(g_protocol_rx_buffer[OFFS_TWOWAY_VALVE_STATE]);
-    g_decoded_data.three_way_valve_state2 = getBit7and8(g_protocol_rx_buffer[OFFS_THREEWAY_VALVE_STATE2]);
+    g_decoded_data.z2_pump_state = getBit1and2(g_protocol_rx.data[OFFS_Z2_PUMP_STATE]);
+    g_decoded_data.z1_pump_state = getBit3and4(g_protocol_rx.data[OFFS_Z1_PUMP_STATE]);
+    g_decoded_data.two_way_valve_state = getBit5and6(g_protocol_rx.data[OFFS_TWOWAY_VALVE_STATE]);
+    g_decoded_data.three_way_valve_state2 = getBit7and8(g_protocol_rx.data[OFFS_THREEWAY_VALVE_STATE2]);
     
     // Valve PID settings (stored as int16_t * 100) — direct decoding
-    g_decoded_data.z1_valve_pid = getValvePID(g_protocol_rx_buffer[OFFS_Z1_VALVE_PID]);
-    g_decoded_data.z2_valve_pid = getValvePID(g_protocol_rx_buffer[OFFS_Z2_VALVE_PID]);
+    g_decoded_data.z1_valve_pid = getValvePID(g_protocol_rx.data[OFFS_Z1_VALVE_PID]);
+    g_decoded_data.z2_valve_pid = getValvePID(g_protocol_rx.data[OFFS_Z2_VALVE_PID]);
     
     // Bivalent settings — direct decoding
-    g_decoded_data.bivalent_control = getBit7and8(g_protocol_rx_buffer[OFFS_BIVALENT_CONTROL]);
-    g_decoded_data.bivalent_mode = getBit5and6(g_protocol_rx_buffer[OFFS_BIVALENT_MODE]);
-    g_decoded_data.bivalent_start_temp = getIntMinus128(g_protocol_rx_buffer[OFFS_BIVALENT_START_TEMP]) * 100;
-    g_decoded_data.bivalent_advanced_heat = getBit3and4(g_protocol_rx_buffer[OFFS_BIVALENT_ADV_HEAT]);
-    g_decoded_data.bivalent_advanced_dhw = getBit1and2(g_protocol_rx_buffer[OFFS_BIVALENT_ADV_DHW]);
-    g_decoded_data.bivalent_advanced_start_temp = getIntMinus128(g_protocol_rx_buffer[OFFS_BIVALENT_ADV_START_TEMP]) * 100;
-    g_decoded_data.bivalent_advanced_stop_temp = getIntMinus128(g_protocol_rx_buffer[OFFS_BIVALENT_ADV_STOP_TEMP]) * 100;
-    g_decoded_data.bivalent_advanced_start_delay = getIntMinus1(g_protocol_rx_buffer[OFFS_BIVALENT_ADV_START_DELAY]);
-    g_decoded_data.bivalent_advanced_stop_delay = getIntMinus1(g_protocol_rx_buffer[OFFS_BIVALENT_ADV_STOP_DELAY]);
-    g_decoded_data.bivalent_advanced_dhw_delay = getIntMinus1(g_protocol_rx_buffer[OFFS_BIVALENT_ADV_DHW_DELAY]);
+    g_decoded_data.bivalent_control = getBit7and8(g_protocol_rx.data[OFFS_BIVALENT_CONTROL]);
+    g_decoded_data.bivalent_mode = getBit5and6(g_protocol_rx.data[OFFS_BIVALENT_MODE]);
+    g_decoded_data.bivalent_start_temp = getIntMinus128(g_protocol_rx.data[OFFS_BIVALENT_START_TEMP]);
+    g_decoded_data.bivalent_advanced_heat = getBit3and4(g_protocol_rx.data[OFFS_BIVALENT_ADV_HEAT]);
+    g_decoded_data.bivalent_advanced_dhw = getBit1and2(g_protocol_rx.data[OFFS_BIVALENT_ADV_DHW]);
+    g_decoded_data.bivalent_advanced_start_temp = getIntMinus128(g_protocol_rx.data[OFFS_BIVALENT_ADV_START_TEMP]);
+    g_decoded_data.bivalent_advanced_stop_temp = getIntMinus128(g_protocol_rx.data[OFFS_BIVALENT_ADV_STOP_TEMP]);
+    g_decoded_data.bivalent_advanced_start_delay = getIntMinus1(g_protocol_rx.data[OFFS_BIVALENT_ADV_START_DELAY]);
+    g_decoded_data.bivalent_advanced_stop_delay = getIntMinus1(g_protocol_rx.data[OFFS_BIVALENT_ADV_STOP_DELAY]);
+    g_decoded_data.bivalent_advanced_dhw_delay = getIntMinus1(g_protocol_rx.data[OFFS_BIVALENT_ADV_DHW_DELAY]);
     
     // Timing settings
-    g_decoded_data.heater_delay_time = getIntMinus1(g_protocol_rx_buffer[OFFS_HEATER_DELAY_TIME]);
-    g_decoded_data.heater_start_delta = getIntMinus128(g_protocol_rx_buffer[OFFS_HEATER_START_DELTA]) * 100;
-    g_decoded_data.heater_stop_delta = getIntMinus128(g_protocol_rx_buffer[OFFS_HEATER_STOP_DELTA]) * 100;
+    g_decoded_data.heater_delay_time = getIntMinus1(g_protocol_rx.data[OFFS_HEATER_DELAY_TIME]);
+    g_decoded_data.heater_start_delta = getIntMinus128(g_protocol_rx.data[OFFS_HEATER_START_DELTA]);
+    g_decoded_data.heater_stop_delta = getIntMinus128(g_protocol_rx.data[OFFS_HEATER_STOP_DELTA]);
     
     // Operation hours
-    g_decoded_data.room_heater_operations_hours = ((g_protocol_rx_buffer[186] << 8) | g_protocol_rx_buffer[185]) - 1;
-    g_decoded_data.dhw_heater_operations_hours = ((g_protocol_rx_buffer[189] << 8) | g_protocol_rx_buffer[188]) - 1;
+    g_decoded_data.room_heater_operations_hours = getUint16(OFFS_ROOM_HEATER_OPERATIONS_HOURS);
+    g_decoded_data.dhw_heater_operations_hours = getUint16(OFFS_DHW_HEATER_OPERATIONS_HOURS);
     
     // Error and model (string topics) — copy as C-strings from buffer starting at topic index
     {
         // Error string is at bytes 113-114 (Error_type and Error_number)
-        int Error_type = (int)(g_protocol_rx_buffer[113]);
-        int Error_number = ((int)(g_protocol_rx_buffer[114])) - 17;
+        int Error_type = (int)(g_protocol_rx.data[OFFS_ERROR_TYPE]);
+        int Error_number = ((int)(g_protocol_rx.data[OFFS_ERROR_NUMBER])) - 17;
         if (Error_type == 177) { // B1=F type error
             snprintf(g_decoded_data.error_state, sizeof(g_decoded_data.error_state), "F%02X", Error_number);
         } else if (Error_type == 161) { // A1=H type error
@@ -496,10 +508,10 @@ esp_err_t decode_main_data(void) {
     }
     {
         // Model string is at bytes 129-138 (10 bytes)
-        uint8_t model[10] = { g_protocol_rx_buffer[129], g_protocol_rx_buffer[130], g_protocol_rx_buffer[131], 
-                             g_protocol_rx_buffer[132], g_protocol_rx_buffer[133], g_protocol_rx_buffer[134], 
-                             g_protocol_rx_buffer[135], g_protocol_rx_buffer[136], g_protocol_rx_buffer[137], 
-                             g_protocol_rx_buffer[138] };
+        uint8_t model[10] = { g_protocol_rx.data[129], g_protocol_rx.data[130], g_protocol_rx.data[131], 
+                             g_protocol_rx.data[132], g_protocol_rx.data[133], g_protocol_rx.data[134], 
+                             g_protocol_rx.data[135], g_protocol_rx.data[136], g_protocol_rx.data[137], 
+                             g_protocol_rx.data[138] };
         char modelResult[31];
         for (size_t i = 0; i < 10; ++i) {
             sprintf(&modelResult[i*3], "%02X ", model[i]);
@@ -540,8 +552,8 @@ esp_err_t decode_extra_data(void) {
 esp_err_t decode_opt_data(void) {
     ESP_LOGD(TAG, "Decoding optional data");
     
-    // Optional PCB data decoding from g_protocol_rx_buffer[4]
-    uint8_t opt_data = g_protocol_rx_buffer[OFFS_OPT_PCB_DATA];
+    // Optional PCB data decoding from g_protocol_rx.data[4]
+    uint8_t opt_data = g_protocol_rx.data[OFFS_OPT_PCB_DATA];
     
     g_decoded_data.z1_water_pump = (opt_data >> 7) & 0x01;
     g_decoded_data.z1_mixing_valve = (opt_data >> 5) & 0x03;
@@ -555,13 +567,13 @@ esp_err_t decode_opt_data(void) {
     return ESP_OK;
 }
 
-void log_all(void) {
+void log_main_data(void) {
     if (!g_decoded_data.data_valid) {
         ESP_LOGW(TAG, "Data not valid, skipping log");
         return;
     }
     
-    ESP_LOGI(TAG, "=== DECODED DATA ===");
+    ESP_LOGI(TAG, "=== DECODED MAIN DATA ===");
     
     // Main temperatures
     ESP_LOGI(TAG, "main_inlet_temp: %d", g_decoded_data.main_inlet_temp);
@@ -735,5 +747,28 @@ void log_all(void) {
     ESP_LOGI(TAG, "error_state: '%s'", g_decoded_data.error_state);
     ESP_LOGI(TAG, "heat_pump_model: '%s'", g_decoded_data.heat_pump_model);
     
-    ESP_LOGI(TAG, "=== END DECODED DATA ===");
+    ESP_LOGI(TAG, "=== END DECODED MAIN DATA ===");
+}
+
+void log_extra_data(void) {
+    ESP_LOGI(TAG, "=== DECODED EXTRA DATA ===");
+    ESP_LOGI(TAG, "heat_power_consumption_extra: %u", g_decoded_data.heat_power_consumption_extra);
+    ESP_LOGI(TAG, "cool_power_consumption_extra: %u", g_decoded_data.cool_power_consumption_extra);
+    ESP_LOGI(TAG, "dhw_power_consumption_extra: %u", g_decoded_data.dhw_power_consumption_extra);
+    ESP_LOGI(TAG, "heat_power_production_extra: %u", g_decoded_data.heat_power_production_extra);
+    ESP_LOGI(TAG, "cool_power_production_extra: %u", g_decoded_data.cool_power_production_extra);
+    ESP_LOGI(TAG, "dhw_power_production_extra: %u", g_decoded_data.dhw_power_production_extra);
+    ESP_LOGI(TAG, "=== END DECODED EXTRA DATA ===");
+}
+
+void log_opt_data(void) {
+    ESP_LOGI(TAG, "=== DECODED OPT DATA ===");
+    ESP_LOGI(TAG, "z1_water_pump: %u", g_decoded_data.z1_water_pump);
+    ESP_LOGI(TAG, "z1_mixing_valve: %u", g_decoded_data.z1_mixing_valve);
+    ESP_LOGI(TAG, "z2_water_pump: %u", g_decoded_data.z2_water_pump);
+    ESP_LOGI(TAG, "z2_mixing_valve: %u", g_decoded_data.z2_mixing_valve);
+    ESP_LOGI(TAG, "pool_water_pump: %u", g_decoded_data.pool_water_pump);
+    ESP_LOGI(TAG, "solar_water_pump: %u", g_decoded_data.solar_water_pump);
+    ESP_LOGI(TAG, "alarm_state: %u", g_decoded_data.alarm_state);
+    ESP_LOGI(TAG, "=== END DECODED OPT DATA ===");
 }

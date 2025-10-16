@@ -1,13 +1,13 @@
 /**
  * @file protocol.c
  * @brief Heat pump protocol communication implementation
- * @version 1.0.0
- * @date 2024
+ * @version 0.1.0
+ * @date 2025
  */
 
-#include "include/protocol.h"
-#include "include/decoder.h"
-#include "include/hpc_mqtt.h"
+#include "protocol.h"
+#include "decoder.h"
+#include "mqtt.h"
 #include "esp_log.h"
 #include "driver/uart.h"
 #include "freertos/FreeRTOS.h"
@@ -15,19 +15,21 @@
 #include "freertos/queue.h"
 #include "string.h"
 #include "stdlib.h"
+#include "config.h"
 
 static const char *TAG = "PROTOCOL";
 
-// Global buffer for UART communication
-uint8_t g_protocol_rx_buffer[PROTOCOL_BUFFER_SIZE];
+// Global RX buffer with length metadata
+protocol_rx_t g_protocol_rx = {0};
 
 // Global protocol context
 protocol_context_t g_protocol_ctx = {0};
 
+
 // Protocol command templates (based on HeishaMon analysis)
 static const uint8_t initial_query[] = {0x31, 0x05, 0x10, 0x01, 0x00, 0x00, 0x00};
 
-static const uint8_t panasonic_query[] = {
+const uint8_t panasonic_query[] = {
     0x71, 0x6c, 0x01, 0x10, 0x00, 0x00, 0x00, 0x00,
     0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
     0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
@@ -44,7 +46,7 @@ static const uint8_t panasonic_query[] = {
     0x00, 0x00, 0x00, 0x00, 0x00, 0x00
 };
 
-static const uint8_t optional_pcb_query[] = {
+const uint8_t optional_pcb_query[] = {
     0xF1, 0x11, 0x01, 0x50, 0x00, 0x00, 0x40, 0xFF,
     0xFF, 0xE5, 0xFF, 0xFF, 0x00, 0xFF, 0xEB, 0xFF,
     0xFF, 0x00, 0x00
@@ -86,7 +88,7 @@ bool protocol_validate_checksum(const uint8_t *data, size_t size) {
  * @return ESP_OK on success
  */
 static esp_err_t protocol_uart_send(const uint8_t *data, size_t size) {
-    int bytes_written = uart_write_bytes(PROTOCOL_UART_NUM, data, size);
+    int bytes_written = uart_write_bytes(CFG_UART_NUM, data, size);
     
     if (bytes_written == size) {
         return ESP_OK;
@@ -104,7 +106,7 @@ static esp_err_t protocol_uart_send(const uint8_t *data, size_t size) {
  * @return Number of bytes received
  */
 static int protocol_uart_receive(uint8_t *data, size_t max_size) {
-    return uart_read_bytes(PROTOCOL_UART_NUM, data, max_size, pdMS_TO_TICKS(PROTOCOL_READ_TIMEOUT_MS));
+    return uart_read_bytes(CFG_UART_NUM, data, max_size, pdMS_TO_TICKS(CFG_READ_TIMEOUT_MS));
 }
 
 /**
@@ -141,16 +143,16 @@ static esp_err_t protocol_process_received_data(const uint8_t *data, size_t size
     ESP_LOGD(TAG, "Received valid data: %d bytes, header: 0x%02X", size, data[0]);
 
     // Process based on data type
-    if (size == PROTOCOL_MAIN_DATA_SIZE && data[3] == PROTOCOL_DATA_MAIN) {
+    if (size == CFG_MAIN_DATA_SIZE && data[3] == PROTOCOL_DATA_MAIN) {
         ESP_LOGI(TAG, "Received main data block");
         
         // Decode main data
         esp_err_t decode_ret = decode_main_data();
         if (decode_ret == ESP_OK) {
             ESP_LOGI(TAG, "Main data decoded successfully");
-            // Log all decoded parameters
-            log_all();
-            // MQTT publish
+            // Log main data
+            log_main_data();
+            // Publish to MQTT
             hpc_mqtt_publish_int("main/inlet_temp", g_decoded_data.main_inlet_temp, 0, false);
             hpc_mqtt_publish_int("main/outlet_temp", g_decoded_data.main_outlet_temp, 0, false);
             hpc_mqtt_publish_int("outside/temp", g_decoded_data.outside_temp, 0, false);
@@ -160,28 +162,32 @@ static esp_err_t protocol_process_received_data(const uint8_t *data, size_t size
             ESP_LOGE(TAG, "Failed to decode main data: %s", esp_err_to_name(decode_ret));
         }
         
-    } else if (size == PROTOCOL_EXTRA_DATA_SIZE && data[3] == PROTOCOL_DATA_EXTRA) {
+    } else if (size == CFG_EXTRA_DATA_SIZE && data[3] == PROTOCOL_DATA_EXTRA) {
         ESP_LOGI(TAG, "Received extra data block");
         
         // Decode extra data
         esp_err_t decode_ret = decode_extra_data();
         if (decode_ret == ESP_OK) {
             ESP_LOGI(TAG, "Extra data decoded successfully");
-            // Log all decoded parameters
+            // Log extra data
+            log_extra_data();
+            // Publish to MQTT
             hpc_mqtt_publish_int("power_extra/heat_consumption", g_decoded_data.heat_power_consumption_extra, 0, false);
             hpc_mqtt_publish_int("power_extra/cool_consumption", g_decoded_data.cool_power_consumption_extra, 0, false);
         } else {
             ESP_LOGE(TAG, "Failed to decode extra data: %s", esp_err_to_name(decode_ret));
         }
         
-    } else if (size == PROTOCOL_OPT_DATA_SIZE && data[3] == PROTOCOL_DATA_OPT) {
+    } else if (size == CFG_OPT_DATA_SIZE && data[3] == PROTOCOL_DATA_OPT) {
         ESP_LOGI(TAG, "Received optional data block");
         
         // Decode optional data
         esp_err_t decode_ret = decode_opt_data();
         if (decode_ret == ESP_OK) {
             ESP_LOGI(TAG, "Optional data decoded successfully");
-            // Log all decoded parameters
+            // Log optional data
+            log_opt_data();
+            // Publish to MQTT
             hpc_mqtt_publish_int("opt/z1_water_pump", g_decoded_data.z1_water_pump, 0, false);
             hpc_mqtt_publish_int("opt/z2_water_pump", g_decoded_data.z2_water_pump, 0, false);
             hpc_mqtt_publish_int("opt/alarm_state", g_decoded_data.alarm_state, 0, true);
@@ -205,9 +211,8 @@ static esp_err_t protocol_process_received_data(const uint8_t *data, size_t size
  * @param pvParameters Task parameters
  */
 void protocol_task(void *pvParameters) {
-    protocol_cmd_t cmd;
     TickType_t last_query_time = 0;
-    const TickType_t query_interval = pdMS_TO_TICKS(PROTOCOL_QUERY_INTERVAL_MS);
+    const TickType_t query_interval = pdMS_TO_TICKS(CFG_QUERY_INTERVAL_MS);
 
     ESP_LOGI(TAG, "Protocol task started");
     
@@ -217,6 +222,7 @@ void protocol_task(void *pvParameters) {
 
     while (1) {
         // Process commands from queue
+        protocol_cmd_t cmd;
         if (xQueueReceive(g_protocol_ctx.command_queue, &cmd, 0) == pdTRUE) {
             ESP_LOGD(TAG, "Processing command type: %d", cmd.type);
             
@@ -224,9 +230,10 @@ void protocol_task(void *pvParameters) {
             esp_err_t ret = protocol_uart_send(cmd.data, cmd.data_size);
             if (ret == ESP_OK) {
                 // Wait for response
-                int bytes_received = protocol_uart_receive(g_protocol_rx_buffer, sizeof(g_protocol_rx_buffer));
+                int bytes_received = protocol_uart_receive(g_protocol_rx.data, sizeof(g_protocol_rx.data));
                 if (bytes_received > 0) {
-                    if(protocol_process_received_data(g_protocol_rx_buffer, bytes_received) != ESP_OK) {
+                    g_protocol_rx.len = (size_t)bytes_received;
+                    if(protocol_process_received_data(g_protocol_rx.data, bytes_received) != ESP_OK) {
                         ESP_LOGE(TAG, "Failed to process received data");
                     }
                 } else {
@@ -258,8 +265,7 @@ void protocol_task(void *pvParameters) {
  * @brief Initialize heat pump protocol
  * @return ESP_OK on success
  */
-esp_err_t protocol_init(void)
-{
+esp_err_t protocol_init(void) {
     esp_err_t ret = ESP_OK;
 
     ESP_LOGI(TAG, "Initializing heat pump protocol");
@@ -273,16 +279,16 @@ esp_err_t protocol_init(void)
 
     // Configure UART
     g_protocol_ctx.uart_config = (uart_config_t){
-        .baud_rate = PROTOCOL_BAUD_RATE,
-        .data_bits = PROTOCOL_DATA_BITS,
-        .parity = PROTOCOL_PARITY,
-        .stop_bits = PROTOCOL_STOP_BITS,
-        .flow_ctrl = PROTOCOL_FLOW_CTRL,
+        .baud_rate = CFG_BAUD_RATE,
+        .data_bits = CFG_DATA_BITS,
+        .parity = CFG_PARITY,
+        .stop_bits = CFG_STOP_BITS,
+        .flow_ctrl = CFG_FLOW_CTRL,
         .source_clk = UART_SCLK_DEFAULT
     };
 
     // Install UART driver
-    ret = uart_driver_install(PROTOCOL_UART_NUM, PROTOCOL_BUFFER_SIZE * 2, 
+    ret = uart_driver_install(CFG_UART_NUM, PROTOCOL_BUFFER_SIZE * 2, 
         PROTOCOL_BUFFER_SIZE * 2, 0, NULL, 0); 
     if (ret != ESP_OK) {
         ESP_LOGE(TAG, "Failed to install UART driver: %s", esp_err_to_name(ret));
@@ -290,14 +296,14 @@ esp_err_t protocol_init(void)
     }
 
     // Configure UART parameters
-    ret = uart_param_config(PROTOCOL_UART_NUM, &g_protocol_ctx.uart_config);
+    ret = uart_param_config(CFG_UART_NUM, &g_protocol_ctx.uart_config);
     if (ret != ESP_OK) {
         ESP_LOGE(TAG, "Failed to configure UART parameters: %s", esp_err_to_name(ret));
         return ret;
     }
 
     // Set UART pins
-    ret = uart_set_pin(PROTOCOL_UART_NUM, PROTOCOL_TX_PIN, PROTOCOL_RX_PIN,
+    ret = uart_set_pin(CFG_UART_NUM, CFG_TX_PIN, CFG_RX_PIN,
                        UART_PIN_NO_CHANGE, UART_PIN_NO_CHANGE);
     if (ret != ESP_OK) {
         ESP_LOGE(TAG, "Failed to set UART pins: %s", esp_err_to_name(ret));
@@ -305,7 +311,7 @@ esp_err_t protocol_init(void)
     }
 
     // Create command queue
-    g_protocol_ctx.command_queue = xQueueCreate(PROTOCOL_QUEUE_SIZE, sizeof(protocol_cmd_t));
+    g_protocol_ctx.command_queue = xQueueCreate(CFG_QUEUE_SIZE, sizeof(protocol_cmd_t));
     if (g_protocol_ctx.command_queue == NULL) {
         ESP_LOGE(TAG, "Failed to create command queue");
         return ESP_ERR_NO_MEM;
@@ -339,12 +345,11 @@ esp_err_t protocol_start(void)
  * @param cmd Command to send
  * @return ESP_OK on success
  */
-esp_err_t protocol_send_command(const protocol_cmd_t *cmd)
-{
+esp_err_t protocol_send_command(const protocol_cmd_t *cmd) {
     if (cmd == NULL) {
         return ESP_ERR_INVALID_ARG;
     }
-
+    
     if (xQueueSend(g_protocol_ctx.command_queue, cmd, pdMS_TO_TICKS(100)) != pdTRUE) {
         ESP_LOGW(TAG, "Failed to send command to queue");
         return ESP_ERR_TIMEOUT;
@@ -359,10 +364,10 @@ esp_err_t protocol_send_command(const protocol_cmd_t *cmd)
  */
 esp_err_t protocol_send_initial_query(void)
 {
-    protocol_cmd_t cmd = {
-        .type = PROTOCOL_CMD_INITIAL,
-        .data_size = sizeof(initial_query)
-    };
+    protocol_cmd_t cmd = {0};
+    
+    cmd.type = PROTOCOL_CMD_INITIAL;
+    cmd.data_size = sizeof(initial_query);
     
     memcpy(cmd.data, initial_query, sizeof(initial_query));
     
@@ -376,10 +381,10 @@ esp_err_t protocol_send_initial_query(void)
  */
 esp_err_t protocol_request_main_data(void)
 {
-    protocol_cmd_t cmd = {
-        .type = PROTOCOL_CMD_MAIN_DATA,
-        .data_size = sizeof(panasonic_query)
-    };
+    protocol_cmd_t cmd = {0};
+    
+    cmd.type = PROTOCOL_CMD_MAIN_DATA;
+    cmd.data_size = sizeof(panasonic_query);
     
     memcpy(cmd.data, panasonic_query, sizeof(panasonic_query));
     cmd.data[3] = PROTOCOL_DATA_MAIN; // Set data type to main
@@ -394,10 +399,10 @@ esp_err_t protocol_request_main_data(void)
  */
 esp_err_t protocol_request_extra_data(void)
 {
-    protocol_cmd_t cmd = {
-        .type = PROTOCOL_CMD_EXTRA_DATA,
-        .data_size = sizeof(panasonic_query)
-    };
+    protocol_cmd_t cmd = {0};
+    
+    cmd.type = PROTOCOL_CMD_EXTRA_DATA;
+    cmd.data_size = sizeof(panasonic_query);
     
     memcpy(cmd.data, panasonic_query, sizeof(panasonic_query));
     cmd.data[3] = PROTOCOL_DATA_EXTRA; // Set data type to extra
@@ -412,10 +417,10 @@ esp_err_t protocol_request_extra_data(void)
  */
 esp_err_t protocol_request_opt_data(void)
 {
-    protocol_cmd_t cmd = {
-        .type = PROTOCOL_CMD_OPT_DATA,
-        .data_size = sizeof(optional_pcb_query)
-    };
+    protocol_cmd_t cmd = {0};
+    
+    cmd.type = PROTOCOL_CMD_OPT_DATA;
+    cmd.data_size = sizeof(optional_pcb_query);
     
     memcpy(cmd.data, optional_pcb_query, sizeof(optional_pcb_query));
     
@@ -435,10 +440,10 @@ esp_err_t protocol_send_write_command(const uint8_t *data, size_t size)
         return ESP_ERR_INVALID_ARG;
     }
 
-    protocol_cmd_t cmd = {
-        .type = PROTOCOL_CMD_WRITE,
-        .data_size = size
-    };
+    protocol_cmd_t cmd = {0};
+    
+    cmd.type = PROTOCOL_CMD_WRITE;
+    cmd.data_size = size;
     
     memcpy(cmd.data, data, size);
     

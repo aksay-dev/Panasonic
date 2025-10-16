@@ -18,67 +18,59 @@
 extern "C" {
 #endif
 
-// Constants from HeishaMon
-#define NUMBER_OF_TOPICS 139 // last topic number + 1
-#define NUMBER_OF_TOPICS_EXTRA 6 // last topic number + 1
-#define NUMBER_OF_OPT_TOPICS 7 // last topic number + 1
-#define MAX_TOPIC_LEN 42 // max length + 1
-#define DATASIZE 203 // Main data size
-#define EXTRADATASIZE 110 // Extra data size
-#define OPTDATASIZE 20 // Optional data size
-
 // Main decoded data structure
 typedef struct {
-    // Basic temperatures (stored as int16_t * 100, e.g. 25.5°C = 2550)
+    // Basic temperatures main_inlet_temp & main_outlet_temp (stored as int16_t * 100, e.g. 25.5°C = 2550)
     int16_t main_inlet_temp;           // TOP5
     int16_t main_outlet_temp;          // TOP6
-    int16_t main_target_temp;          // TOP7
-    int16_t dhw_temp;                  // TOP10
-    int16_t dhw_target_temp;           // TOP9
-    int16_t outside_temp;              // TOP14
-    int16_t room_thermostat_temp;      // TOP33
-    int16_t buffer_temp;               // TOP46
-    int16_t solar_temp;                // TOP47
-    int16_t pool_temp;                 // TOP48
-    int16_t main_hex_outlet_temp;      // TOP49
-    int16_t discharge_temp;            // TOP50
-    int16_t inside_pipe_temp;          // TOP51
-    int16_t defrost_temp;              // TOP52
-    int16_t eva_outlet_temp;           // TOP53
-    int16_t bypass_outlet_temp;        // TOP54
-    int16_t ipm_temp;                  // TOP55
-    int16_t outside_pipe_temp;         // TOP21
-    int16_t z1_temp;                   // TOP56
-    int16_t z2_temp;                   // TOP57
-    int16_t z1_water_temp;             // TOP36
-    int16_t z2_water_temp;             // TOP37
-    int16_t z1_water_target_temp;      // TOP42
-    int16_t z2_water_target_temp;      // TOP43
-    int16_t second_inlet_temp;         // TOP116
-    int16_t economizer_outlet_temp;    // TOP117
-    int16_t second_room_thermostat_temp; // TOP118
+    // Basic temperatures (stored as int8_t, e.g. 25°C = 25)
+    int8_t main_target_temp;          // TOP7
+    int8_t dhw_temp;                  // TOP10
+    int8_t dhw_target_temp;           // TOP9
+    int8_t outside_temp;              // TOP14
+    int8_t room_thermostat_temp;      // TOP33
+    int8_t buffer_temp;               // TOP46
+    int8_t solar_temp;                // TOP47
+    int8_t pool_temp;                 // TOP48
+    int8_t main_hex_outlet_temp;      // TOP49
+    int8_t discharge_temp;            // TOP50
+    int8_t inside_pipe_temp;          // TOP51
+    int8_t defrost_temp;              // TOP52
+    int8_t eva_outlet_temp;           // TOP53
+    int8_t bypass_outlet_temp;        // TOP54
+    int8_t ipm_temp;                  // TOP55
+    int8_t outside_pipe_temp;         // TOP21
+    int8_t z1_temp;                   // TOP56
+    int8_t z2_temp;                   // TOP57
+    int8_t z1_water_temp;             // TOP36
+    int8_t z2_water_temp;             // TOP37
+    int8_t z1_water_target_temp;      // TOP42
+    int8_t z2_water_target_temp;      // TOP43
+    int8_t second_inlet_temp;         // TOP116
+    int8_t economizer_outlet_temp;    // TOP117
+    int8_t second_room_thermostat_temp; // TOP118
 
-    // Zone temperatures and settings (stored as int16_t * 100)
-    int16_t z1_heat_request_temp;      // TOP27
-    int16_t z1_cool_request_temp;      // TOP28
-    int16_t z2_heat_request_temp;      // TOP34
-    int16_t z2_cool_request_temp;      // TOP35
-    int16_t z1_heat_curve_target_high_temp;  // TOP29
-    int16_t z1_heat_curve_target_low_temp;   // TOP30
-    int16_t z1_heat_curve_outside_high_temp; // TOP31
-    int16_t z1_heat_curve_outside_low_temp;  // TOP32
-    int16_t z1_cool_curve_target_high_temp;  // TOP72
-    int16_t z1_cool_curve_target_low_temp;   // TOP73
-    int16_t z1_cool_curve_outside_high_temp; // TOP74
-    int16_t z1_cool_curve_outside_low_temp;  // TOP75
-    int16_t z2_heat_curve_target_high_temp;  // TOP82
-    int16_t z2_heat_curve_target_low_temp;   // TOP83
-    int16_t z2_heat_curve_outside_high_temp; // TOP84
-    int16_t z2_heat_curve_outside_low_temp;  // TOP85
-    int16_t z2_cool_curve_target_high_temp;  // TOP86
-    int16_t z2_cool_curve_target_low_temp;   // TOP87
-    int16_t z2_cool_curve_outside_high_temp; // TOP88
-    int16_t z2_cool_curve_outside_low_temp;  // TOP89
+    // Zone temperatures and settings (stored as int8_t, e.g. 25°C = 25)
+    int8_t z1_heat_request_temp;      // TOP27
+    int8_t z1_cool_request_temp;      // TOP28
+    int8_t z2_heat_request_temp;      // TOP34
+    int8_t z2_cool_request_temp;      // TOP35
+    int8_t z1_heat_curve_target_high_temp;  // TOP29
+    int8_t z1_heat_curve_target_low_temp;   // TOP30
+    int8_t z1_heat_curve_outside_high_temp; // TOP31
+    int8_t z1_heat_curve_outside_low_temp;  // TOP32
+    int8_t z1_cool_curve_target_high_temp;  // TOP72
+    int8_t z1_cool_curve_target_low_temp;   // TOP73
+    int8_t z1_cool_curve_outside_high_temp; // TOP74
+    int8_t z1_cool_curve_outside_low_temp;  // TOP75
+    int8_t z2_heat_curve_target_high_temp;  // TOP82
+    int8_t z2_heat_curve_target_low_temp;   // TOP83
+    int8_t z2_heat_curve_outside_high_temp; // TOP84
+    int8_t z2_heat_curve_outside_low_temp;  // TOP85
+    int8_t z2_cool_curve_target_high_temp;  // TOP86
+    int8_t z2_cool_curve_target_low_temp;   // TOP87
+    int8_t z2_cool_curve_outside_high_temp; // TOP88
+    int8_t z2_cool_curve_outside_low_temp;  // TOP89
 
     // Power and energy
     uint16_t heat_power_production;  // TOP15
@@ -252,7 +244,9 @@ esp_err_t decode_extra_data(void);
  */
 esp_err_t decode_opt_data(void);
 
-void log_all(void);
+void log_main_data(void);
+void log_extra_data(void);
+void log_opt_data(void);
 
 #ifdef __cplusplus
 }

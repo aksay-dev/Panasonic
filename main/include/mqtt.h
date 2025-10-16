@@ -11,6 +11,17 @@
 extern "C" {
 #endif
 
+// MQTT topic constants
+#define MQTT_MAX_TOPIC_LEN 42
+#define MQTT_TOPIC_MAIN "main"
+#define MQTT_TOPIC_EXTRA "extra"
+#define MQTT_TOPIC_OPT "opt"
+#define MQTT_TOPIC_CMD "cmd"
+#define MQTT_TOPIC_LWT "LWT"
+#define MQTT_TOPIC_IP "ip"
+
+
+
 typedef struct {
     const char *broker_uri;
     const char *client_id;
