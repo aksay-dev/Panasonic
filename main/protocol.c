@@ -224,7 +224,7 @@ void protocol_task(void *pvParameters) {
         // Process commands from queue
         protocol_cmd_t cmd;
         if (xQueueReceive(g_protocol_ctx.command_queue, &cmd, 0) == pdTRUE) {
-            ESP_LOGD(TAG, "Processing command type: %d", cmd.type);
+            ESP_LOGD(TAG, "Processing command type: 0x%02X", cmd.data[0]);
             
             // Send command
             esp_err_t ret = protocol_uart_send(cmd.data, cmd.data_size);
@@ -237,10 +237,10 @@ void protocol_task(void *pvParameters) {
                         ESP_LOGE(TAG, "Failed to process received data");
                     }
                 } else {
-                    ESP_LOGW(TAG, "No response received for command type: %d", cmd.type);
+                    ESP_LOGW(TAG, "No response received for command type: 0x%02X", cmd.data[0]);
                 }
             } else {
-                ESP_LOGE(TAG, "Failed to send command type: %d", cmd.type);
+                ESP_LOGE(TAG, "Failed to send command type: 0x%02X", cmd.data[0]);
             }
         }
 
@@ -362,11 +362,9 @@ esp_err_t protocol_send_command(const protocol_cmd_t *cmd) {
  * @brief Send initial query to heat pump
  * @return ESP_OK on success
  */
-esp_err_t protocol_send_initial_query(void)
-{
+esp_err_t protocol_send_initial_query(void) {
     protocol_cmd_t cmd = {0};
     
-    cmd.type = PROTOCOL_CMD_INITIAL;
     cmd.data_size = sizeof(initial_query);
     
     memcpy(cmd.data, initial_query, sizeof(initial_query));
@@ -379,11 +377,9 @@ esp_err_t protocol_send_initial_query(void)
  * @brief Request main data from heat pump
  * @return ESP_OK on success
  */
-esp_err_t protocol_request_main_data(void)
-{
+esp_err_t protocol_request_main_data(void) {
     protocol_cmd_t cmd = {0};
     
-    cmd.type = PROTOCOL_CMD_MAIN_DATA;
     cmd.data_size = sizeof(panasonic_query);
     
     memcpy(cmd.data, panasonic_query, sizeof(panasonic_query));
@@ -401,7 +397,6 @@ esp_err_t protocol_request_extra_data(void)
 {
     protocol_cmd_t cmd = {0};
     
-    cmd.type = PROTOCOL_CMD_EXTRA_DATA;
     cmd.data_size = sizeof(panasonic_query);
     
     memcpy(cmd.data, panasonic_query, sizeof(panasonic_query));
@@ -419,7 +414,6 @@ esp_err_t protocol_request_opt_data(void)
 {
     protocol_cmd_t cmd = {0};
     
-    cmd.type = PROTOCOL_CMD_OPT_DATA;
     cmd.data_size = sizeof(optional_pcb_query);
     
     memcpy(cmd.data, optional_pcb_query, sizeof(optional_pcb_query));
@@ -428,25 +422,3 @@ esp_err_t protocol_request_opt_data(void)
     return protocol_send_command(&cmd);
 }
 
-/**
- * @brief Send write command to heat pump
- * @param data Data to write
- * @param size Data size
- * @return ESP_OK on success
- */
-esp_err_t protocol_send_write_command(const uint8_t *data, size_t size)
-{
-    if (data == NULL || size == 0) {
-        return ESP_ERR_INVALID_ARG;
-    }
-
-    protocol_cmd_t cmd = {0};
-    
-    cmd.type = PROTOCOL_CMD_WRITE;
-    cmd.data_size = size;
-    
-    memcpy(cmd.data, data, size);
-    
-    ESP_LOGD(TAG, "Sending write command: %d bytes", size);
-    return protocol_send_command(&cmd);
-}

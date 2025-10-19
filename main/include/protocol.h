@@ -19,6 +19,7 @@ extern "C" {
 
 #define PROTOCOL_BUFFER_SIZE 256
 #define PROTOCOL_WRITE_SIZE 110
+#define PROTOCOL_OPT_WRITE_SIZE 19
 
 // RX buffer with length metadata
 typedef struct {
@@ -29,13 +30,13 @@ typedef struct {
 extern protocol_rx_t g_protocol_rx;
 
 // Protocol command types
-typedef enum {
-    PROTOCOL_CMD_INITIAL = 0,
-    PROTOCOL_CMD_MAIN_DATA,
-    PROTOCOL_CMD_EXTRA_DATA,
-    PROTOCOL_CMD_OPT_DATA,
-    PROTOCOL_CMD_WRITE
-} protocol_cmd_type_t;
+// typedef enum {
+//     PROTOCOL_CMD_INITIAL = 0,
+//     PROTOCOL_CMD_MAIN_DATA,
+//     PROTOCOL_CMD_EXTRA_DATA,
+//     PROTOCOL_CMD_OPT_DATA,
+//     PROTOCOL_CMD_WRITE
+// } protocol_cmd_type_t;
 
 // Protocol packet types
 typedef enum {
@@ -53,8 +54,7 @@ typedef enum {
 
 // Protocol command structure
 typedef struct {
-    protocol_cmd_type_t type;
-    uint8_t data[PROTOCOL_BUFFER_SIZE];
+    uint8_t data[PROTOCOL_WRITE_SIZE];
     size_t data_size;    
 } protocol_cmd_t;
 
@@ -67,8 +67,9 @@ typedef struct {
 
 // Global protocol context
 extern protocol_context_t g_protocol_ctx;
-extern const uint8_t panasonic_query[PROTOCOL_WRITE_SIZE];
 
+extern const uint8_t panasonic_query[];
+extern const uint8_t optional_pcb_query[];
 
 /**
  * @brief Initialize heat pump protocol

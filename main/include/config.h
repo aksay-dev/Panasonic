@@ -1,9 +1,7 @@
 #ifndef CONFIG_H
 #define CONFIG_H
 
-#include <stdint.h>
 #include <stdbool.h>
-#include "esp_err.h"
 
 #ifdef __cplusplus
 extern "C" {
@@ -27,7 +25,7 @@ extern "C" {
 #define CFG_RX_PIN 16
 
 // Timing constants
-#define CFG_READ_TIMEOUT_MS 1000
+#define CFG_READ_TIMEOUT_MS 2000
 #define CFG_QUERY_INTERVAL_MS 10000
 
 // Protocol constants
