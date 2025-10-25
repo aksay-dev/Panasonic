@@ -7,10 +7,8 @@
 
 #include "protocol.h"
 #include "decoder.h"
-#include "mqtt.h"
 #include "esp_log.h"
 #include "driver/uart.h"
-#include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 #include "freertos/queue.h"
 #include "string.h"
@@ -82,20 +80,31 @@ bool protocol_validate_checksum(const uint8_t *data, size_t size) {
 }
 
 /**
- * @brief Send data via UART
+ * @brief Send data via UART with checksum
  * @param data Data to send
  * @param size Data size
  * @return ESP_OK on success
  */
 static esp_err_t protocol_uart_send(const uint8_t *data, size_t size) {
-    int bytes_written = uart_write_bytes(CFG_UART_NUM, data, size);
+    // Calculate checksum
+    uint8_t checksum = protocol_calculate_checksum(data, size);
     
-    if (bytes_written == size) {
-        return ESP_OK;
-    } else {
-        ESP_LOGE(TAG, "Failed to write all bytes: %d/%d", bytes_written, size);
+    // Send data first
+    int bytes_written = uart_write_bytes(CFG_UART_NUM, data, size);
+    if (bytes_written != size) {
+        ESP_LOGE(TAG, "Failed to write data bytes: %d/%d", bytes_written, size);
         return ESP_FAIL;
     }
+    
+    // Send checksum separately
+    int checksum_written = uart_write_bytes(CFG_UART_NUM, &checksum, 1);
+    if (checksum_written != 1) {
+        ESP_LOGE(TAG, "Failed to write checksum: %d/1", checksum_written);
+        return ESP_FAIL;
+    }
+    
+    ESP_LOGD(TAG, "Sent %d bytes + checksum 0x%02X", size, checksum);
+    return ESP_OK;
 }
 
 /**
@@ -152,12 +161,6 @@ static esp_err_t protocol_process_received_data(const uint8_t *data, size_t size
             ESP_LOGI(TAG, "Main data decoded successfully");
             // Log main data
             log_main_data();
-            // Publish to MQTT
-            hpc_mqtt_publish_int("main/inlet_temp", g_decoded_data.main_inlet_temp, 0, false);
-            hpc_mqtt_publish_int("main/outlet_temp", g_decoded_data.main_outlet_temp, 0, false);
-            hpc_mqtt_publish_int("outside/temp", g_decoded_data.outside_temp, 0, false);
-            hpc_mqtt_publish_int("power/heat_production", g_decoded_data.heat_power_production, 0, false);
-            hpc_mqtt_publish_int("state/operating_mode", g_decoded_data.operating_mode_state, 0, false);
         } else {
             ESP_LOGE(TAG, "Failed to decode main data: %s", esp_err_to_name(decode_ret));
         }
@@ -171,9 +174,6 @@ static esp_err_t protocol_process_received_data(const uint8_t *data, size_t size
             ESP_LOGI(TAG, "Extra data decoded successfully");
             // Log extra data
             log_extra_data();
-            // Publish to MQTT
-            hpc_mqtt_publish_int("power_extra/heat_consumption", g_decoded_data.heat_power_consumption_extra, 0, false);
-            hpc_mqtt_publish_int("power_extra/cool_consumption", g_decoded_data.cool_power_consumption_extra, 0, false);
         } else {
             ESP_LOGE(TAG, "Failed to decode extra data: %s", esp_err_to_name(decode_ret));
         }
@@ -187,10 +187,6 @@ static esp_err_t protocol_process_received_data(const uint8_t *data, size_t size
             ESP_LOGI(TAG, "Optional data decoded successfully");
             // Log optional data
             log_opt_data();
-            // Publish to MQTT
-            hpc_mqtt_publish_int("opt/z1_water_pump", g_decoded_data.z1_water_pump, 0, false);
-            hpc_mqtt_publish_int("opt/z2_water_pump", g_decoded_data.z2_water_pump, 0, false);
-            hpc_mqtt_publish_int("opt/alarm_state", g_decoded_data.alarm_state, 0, true);
         } else {
             ESP_LOGE(TAG, "Failed to decode optional data: %s", esp_err_to_name(decode_ret));
         }
@@ -224,20 +220,25 @@ void protocol_task(void *pvParameters) {
         // Process commands from queue
         protocol_cmd_t cmd;
         if (xQueueReceive(g_protocol_ctx.command_queue, &cmd, 0) == pdTRUE) {
-            ESP_LOGD(TAG, "Processing command type: 0x%02X", cmd.data[0]);
+            
+            // Log command being sent
+            ESP_LOGI(TAG, "Sending command: type=0x%02X, size=%d", cmd.data[0], cmd.data_size);
             
             // Send command
             esp_err_t ret = protocol_uart_send(cmd.data, cmd.data_size);
             if (ret == ESP_OK) {
+                ESP_LOGI(TAG, "Command sent successfully, waiting for response...");
+                
                 // Wait for response
                 int bytes_received = protocol_uart_receive(g_protocol_rx.data, sizeof(g_protocol_rx.data));
                 if (bytes_received > 0) {
+                    ESP_LOGI(TAG, "Received %d bytes response", bytes_received);
                     g_protocol_rx.len = (size_t)bytes_received;
                     if(protocol_process_received_data(g_protocol_rx.data, bytes_received) != ESP_OK) {
                         ESP_LOGE(TAG, "Failed to process received data");
                     }
                 } else {
-                    ESP_LOGW(TAG, "No response received for command type: 0x%02X", cmd.data[0]);
+                        ESP_LOGW(TAG, "No response received for command type: 0x%02X (timeout after %d ms)", cmd.data[0], CFG_READ_TIMEOUT_MS);
                 }
             } else {
                 ESP_LOGE(TAG, "Failed to send command type: 0x%02X", cmd.data[0]);
@@ -249,6 +250,7 @@ void protocol_task(void *pvParameters) {
         if (current_time - last_query_time >= query_interval) {
             last_query_time = current_time;
             
+            ESP_LOGI(TAG, "Sending periodic data queries...");
             // Send periodic queries
             protocol_request_main_data();
             protocol_request_extra_data();
@@ -294,6 +296,8 @@ esp_err_t protocol_init(void) {
         ESP_LOGE(TAG, "Failed to install UART driver: %s", esp_err_to_name(ret));
         return ret;
     }
+    
+    ESP_LOGI(TAG, "UART driver installed successfully");
 
     // Configure UART parameters
     ret = uart_param_config(CFG_UART_NUM, &g_protocol_ctx.uart_config);
@@ -301,6 +305,9 @@ esp_err_t protocol_init(void) {
         ESP_LOGE(TAG, "Failed to configure UART parameters: %s", esp_err_to_name(ret));
         return ret;
     }
+    
+    ESP_LOGI(TAG, "UART parameters configured: baud=%d, data_bits=%d, parity=%d, stop_bits=%d", 
+             CFG_BAUD_RATE, CFG_DATA_BITS, CFG_PARITY, CFG_STOP_BITS);
 
     // Set UART pins
     ret = uart_set_pin(CFG_UART_NUM, CFG_TX_PIN, CFG_RX_PIN,
@@ -309,6 +316,8 @@ esp_err_t protocol_init(void) {
         ESP_LOGE(TAG, "Failed to set UART pins: %s", esp_err_to_name(ret));
         return ret;
     }
+    
+    ESP_LOGI(TAG, "UART pins set: TX=%d, RX=%d", CFG_TX_PIN, CFG_RX_PIN);
 
     // Create command queue
     g_protocol_ctx.command_queue = xQueueCreate(CFG_QUEUE_SIZE, sizeof(protocol_cmd_t));
@@ -420,5 +429,69 @@ esp_err_t protocol_request_opt_data(void)
     
     ESP_LOGD(TAG, "Requesting optional data");
     return protocol_send_command(&cmd);
+}
+
+/**
+ * @brief Test UART communication by sending a simple test
+ * @return ESP_OK on success
+ */
+esp_err_t protocol_test_communication(void) {
+    ESP_LOGI(TAG, "Testing UART communication...");
+    
+    // Send a simple test byte
+    uint8_t test_byte = 0xAA;
+    int bytes_written = uart_write_bytes(CFG_UART_NUM, &test_byte, 1);
+    if (bytes_written != 1) {
+        ESP_LOGE(TAG, "Failed to send test byte");
+        return ESP_FAIL;
+    }
+    
+    ESP_LOGI(TAG, "Test byte sent successfully");
+    return ESP_OK;
+}
+
+/**
+ * @brief Diagnostic function to test heat pump communication
+ * @return ESP_OK on success
+ */
+esp_err_t protocol_diagnostic_test(void) {
+    ESP_LOGI(TAG, "Starting diagnostic test...");
+    
+    // Test 1: Send initial query multiple times
+    for (int i = 0; i < 3; i++) {
+        ESP_LOGI(TAG, "Diagnostic test %d/3: Sending initial query", i + 1);
+        
+        protocol_cmd_t cmd = {0};
+        cmd.data_size = sizeof(initial_query);
+        memcpy(cmd.data, initial_query, sizeof(initial_query));
+        
+        esp_err_t ret = protocol_uart_send(cmd.data, cmd.data_size);
+        if (ret == ESP_OK) {
+            ESP_LOGI(TAG, "Initial query sent, waiting for response...");
+            
+            // Wait longer for response
+            int bytes_received = uart_read_bytes(CFG_UART_NUM, g_protocol_rx.data, 
+                                                sizeof(g_protocol_rx.data), 
+                                                pdMS_TO_TICKS(10000)); // 10 second timeout
+            
+            if (bytes_received > 0) {
+                ESP_LOGI(TAG, "Received %d bytes in diagnostic test", bytes_received);
+                // Log first few bytes
+                ESP_LOGI(TAG, "First bytes: %02X %02X %02X %02X", 
+                         g_protocol_rx.data[0], g_protocol_rx.data[1], 
+                         g_protocol_rx.data[2], g_protocol_rx.data[3]);
+                return ESP_OK;
+            } else {
+                ESP_LOGW(TAG, "No response received in diagnostic test %d", i + 1);
+            }
+        } else {
+            ESP_LOGE(TAG, "Failed to send initial query in diagnostic test %d", i + 1);
+        }
+        
+        vTaskDelay(pdMS_TO_TICKS(2000)); // Wait 2 seconds between attempts
+    }
+    
+    ESP_LOGE(TAG, "Diagnostic test failed - no response from heat pump");
+    return ESP_FAIL;
 }
 

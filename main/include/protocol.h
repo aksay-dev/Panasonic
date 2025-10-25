@@ -29,15 +29,6 @@ typedef struct {
 
 extern protocol_rx_t g_protocol_rx;
 
-// Protocol command types
-// typedef enum {
-//     PROTOCOL_CMD_INITIAL = 0,
-//     PROTOCOL_CMD_MAIN_DATA,
-//     PROTOCOL_CMD_EXTRA_DATA,
-//     PROTOCOL_CMD_OPT_DATA,
-//     PROTOCOL_CMD_WRITE
-// } protocol_cmd_type_t;
-
 // Protocol packet types
 typedef enum {
     PROTOCOL_PKT_READ = 0x71,
@@ -135,6 +126,18 @@ bool protocol_validate_checksum(const uint8_t *data, size_t size);
  * @param pvParameters Task parameters
  */
 void protocol_task(void *pvParameters);
+
+/**
+ * @brief Test UART communication
+ * @return ESP_OK on success
+ */
+esp_err_t protocol_test_communication(void);
+
+/**
+ * @brief Diagnostic function to test heat pump communication
+ * @return ESP_OK on success
+ */
+esp_err_t protocol_diagnostic_test(void);
 
 #ifdef __cplusplus
 }
