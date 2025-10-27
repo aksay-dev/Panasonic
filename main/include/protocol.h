@@ -12,18 +12,45 @@
 #include <stdbool.h>
 #include "esp_err.h"
 #include "driver/uart.h"
+#include "freertos/FreeRTOS.h"
+#include "freertos/queue.h"
+#include "freertos/task.h"
 
 #ifdef __cplusplus
 extern "C" {
 #endif
 
-#define PROTOCOL_BUFFER_SIZE 256
+// UART configuration
+#define PROTOCOL_UART_NUM UART_NUM_2
+#define PROTOCOL_BAUD_RATE 9600
+#define PROTOCOL_DATA_BITS UART_DATA_8_BITS
+#define PROTOCOL_PARITY UART_PARITY_EVEN
+#define PROTOCOL_STOP_BITS UART_STOP_BITS_1
+#define PROTOCOL_FLOW_CTRL UART_HW_FLOWCTRL_DISABLE
+
+// GPIO pins
+#define PROTOCOL_TX_PIN 17
+#define PROTOCOL_RX_PIN 16
+
+// Timing constants
+#define PROTOCOL_READ_TIMEOUT_MS 2000
+#define PROTOCOL_QUERY_INTERVAL_MS 10000
+
+// Queue size
+#define PROTOCOL_QUEUE_SIZE 10
+
+// Command data sizes
+#define PROTOCOL_MAIN_DATA_SIZE 203
+#define PROTOCOL_EXTRA_DATA_SIZE 110
+#define PROTOCOL_OPT_DATA_SIZE 20
 #define PROTOCOL_WRITE_SIZE 110
 #define PROTOCOL_OPT_WRITE_SIZE 19
 
+#define PROTOCOL_OPT_AVAILABLE false
+
 // RX buffer with length metadata
 typedef struct {
-    uint8_t data[PROTOCOL_BUFFER_SIZE];
+    uint8_t data[PROTOCOL_MAIN_DATA_SIZE];
     size_t len;
 } protocol_rx_t;
 
@@ -46,14 +73,15 @@ typedef enum {
 // Protocol command structure
 typedef struct {
     uint8_t data[PROTOCOL_WRITE_SIZE];
-    size_t data_size;    
+    size_t len;    
 } protocol_cmd_t;
 
 // Protocol context
 typedef struct {
-    uart_config_t uart_config;
     QueueHandle_t command_queue;
     TaskHandle_t protocol_task_handle;
+    bool extra_data_block_available;
+    bool opt_data_block_available;
 } protocol_context_t;
 
 // Global protocol context
@@ -126,18 +154,6 @@ bool protocol_validate_checksum(const uint8_t *data, size_t size);
  * @param pvParameters Task parameters
  */
 void protocol_task(void *pvParameters);
-
-/**
- * @brief Test UART communication
- * @return ESP_OK on success
- */
-esp_err_t protocol_test_communication(void);
-
-/**
- * @brief Diagnostic function to test heat pump communication
- * @return ESP_OK on success
- */
-esp_err_t protocol_diagnostic_test(void);
 
 #ifdef __cplusplus
 }

@@ -140,7 +140,7 @@ uint32_t temp2hex(float temp) {
  */
 static esp_err_t send_command(uint8_t data_offset, uint8_t value) {
     protocol_cmd_t cmd = {0};
-    cmd.data_size = PROTOCOL_WRITE_SIZE;
+    cmd.len = PROTOCOL_WRITE_SIZE;
     cmd.data[0] = PROTOCOL_PKT_WRITE;
     cmd.data[1] = 0x6c;
     cmd.data[2] = 0x01;
@@ -232,7 +232,7 @@ esp_err_t set_DHW_temp(int8_t temperature) {
 
 esp_err_t set_curves(const uint8_t *curves) {
     protocol_cmd_t cmd = {0};
-    cmd.data_size = PROTOCOL_WRITE_SIZE;
+    cmd.len = PROTOCOL_WRITE_SIZE;
     cmd.data[0] = PROTOCOL_PKT_WRITE;
     cmd.data[1] = 0x6c;
     cmd.data[2] = 0x01;
@@ -376,7 +376,7 @@ esp_err_t set_external_compressor_control(bool state) {
  */
 esp_err_t set_byte_6(uint8_t val, uint8_t base, uint8_t bit) {
     protocol_cmd_t cmd;
-    cmd.data_size = PROTOCOL_OPT_WRITE_SIZE;
+    cmd.len = PROTOCOL_OPT_WRITE_SIZE;
     memcpy(cmd.data, optional_pcb_query, PROTOCOL_OPT_WRITE_SIZE);
     cmd.data[OPT_OFFSET_BYTE_6] = (cmd.data[OPT_OFFSET_BYTE_6] & ~(base << bit)) | (val << bit);
     return protocol_send_command(&cmd);
@@ -384,7 +384,7 @@ esp_err_t set_byte_6(uint8_t val, uint8_t base, uint8_t bit) {
 
 esp_err_t set_byte_9(uint8_t val) {
     protocol_cmd_t cmd;
-    cmd.data_size = PROTOCOL_OPT_WRITE_SIZE;
+    cmd.len = PROTOCOL_OPT_WRITE_SIZE;
     memcpy(cmd.data, optional_pcb_query, PROTOCOL_OPT_WRITE_SIZE);
     cmd.data[OPT_OFFSET_BYTE_9] = val;
     return protocol_send_command(&cmd);
@@ -424,7 +424,7 @@ esp_err_t set_external_thermostat_2_state(uint8_t mode) {
 
 esp_err_t set_demand_control(uint8_t mode) {
     protocol_cmd_t cmd;
-    cmd.data_size = PROTOCOL_OPT_WRITE_SIZE;
+    cmd.len = PROTOCOL_OPT_WRITE_SIZE;
     memcpy(cmd.data, optional_pcb_query, PROTOCOL_OPT_WRITE_SIZE);
     cmd.data[OPT_OFFSET_DEMAND_CONTROL] = mode;
     return protocol_send_command(&cmd);
@@ -433,7 +433,7 @@ esp_err_t set_demand_control(uint8_t mode) {
 esp_err_t set_xxx_temp(float temperature, uint8_t byte) {
     uint8_t value = temp2hex(temperature);
     protocol_cmd_t cmd;
-    cmd.data_size = PROTOCOL_OPT_WRITE_SIZE;
+    cmd.len = PROTOCOL_OPT_WRITE_SIZE;
     memcpy(cmd.data, optional_pcb_query, PROTOCOL_OPT_WRITE_SIZE);
     cmd.data[byte] = value;
     return protocol_send_command(&cmd);
