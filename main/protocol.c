@@ -69,12 +69,9 @@ uint8_t protocol_calculate_checksum(const uint8_t *data, size_t size) {
  * @return true if checksum is valid
  */
 bool protocol_validate_checksum(const uint8_t *data, size_t size) {
-    if (size < 2) {
-        return false;
-    }
-    
-    uint8_t calculated_checksum = protocol_calculate_checksum(data, size - 1);
-    return (calculated_checksum == data[size - 1]);
+    // uint8_t calculated_checksum = protocol_calculate_checksum(data, size - 1);
+    // return (calculated_checksum == data[size - 1]);
+    return protocol_calculate_checksum(data, size) == 0;
 }
 
 /**
@@ -131,7 +128,7 @@ static esp_err_t protocol_process_received_data(const uint8_t *data, size_t size
 
     // Validate data size
     if(data[1] + 3 != size) {
-        ESP_LOGW(TAG, "Received data size mismatch: %d bytes, expected: %d bytes", size, data[1] + 3);
+        ESP_LOGW(TAG, "Received data size mismatch: received %d bytes, expected: %d bytes", size, data[1] + 3);
         return ESP_ERR_INVALID_SIZE;
     }
 
@@ -154,7 +151,9 @@ static esp_err_t protocol_process_received_data(const uint8_t *data, size_t size
         ESP_LOGI(TAG, "Received main data block");
         
         //do we have valid header and byte 0xc7 is more or equal 3 then assume K&L and more series
-        if ((data[0] == PROTOCOL_PKT_READ) && (data[0xC7] >= 3)) g_protocol_ctx.extra_data_block_available = true;
+        if (!g_protocol_ctx.extra_data_block_available) {
+            if ((data[0] == PROTOCOL_PKT_READ) && (data[0xC7] >= 3)) g_protocol_ctx.extra_data_block_available = true;
+        }
       
         // Decode main data
         esp_err_t decode_ret = decode_main_data();
@@ -286,8 +285,8 @@ esp_err_t protocol_init(void) {
     };
 
     // Install UART driver
-    ret = uart_driver_install(PROTOCOL_UART_NUM, PROTOCOL_MAIN_DATA_SIZE + 1, 
-        PROTOCOL_MAIN_DATA_SIZE + 1, 0, NULL, 0); 
+    ret = uart_driver_install(PROTOCOL_UART_NUM, PROTOCOL_MAX_DATA_SIZE, 
+        PROTOCOL_MAX_DATA_SIZE, 0, NULL, 0); 
     if (ret != ESP_OK) {
         ESP_LOGE(TAG, "Failed to install UART driver: %s", esp_err_to_name(ret));
         return ret;

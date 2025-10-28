@@ -40,6 +40,7 @@ extern "C" {
 #define PROTOCOL_QUEUE_SIZE 10
 
 // Command data sizes
+#define PROTOCOL_MAX_DATA_SIZE 256
 #define PROTOCOL_MAIN_DATA_SIZE 203
 #define PROTOCOL_EXTRA_DATA_SIZE 110
 #define PROTOCOL_OPT_DATA_SIZE 20
@@ -50,7 +51,7 @@ extern "C" {
 
 // RX buffer with length metadata
 typedef struct {
-    uint8_t data[PROTOCOL_MAIN_DATA_SIZE];
+    uint8_t data[PROTOCOL_MAX_DATA_SIZE];
     size_t len;
 } protocol_rx_t;
 
