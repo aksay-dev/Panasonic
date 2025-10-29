@@ -9,6 +9,7 @@
 #include "esp_log.h"
 #include "esp_system.h"
 #include "include/protocol.h"
+#include "include/modbus_slave.h"
 
 // test_decoder disabled
 
@@ -19,10 +20,19 @@ static const char *TAG = "HPC";
  * @return ESP_OK on success
  */
 esp_err_t hpc_init(void) {
-    // Init NVS for storing runtime configuration
-    esp_err_t ret = protocol_init();
+    esp_err_t ret;
+    
+    // Initialize heat pump protocol
+    ret = protocol_init();
     if (ret != ESP_OK) {
         ESP_LOGE(TAG, "Failed to initialize protocol: %s", esp_err_to_name(ret));
+        return ret;
+    }
+
+    // Initialize Modbus slave
+    ret = modbus_slave_init();
+    if (ret != ESP_OK) {
+        ESP_LOGE(TAG, "Failed to initialize Modbus slave: %s", esp_err_to_name(ret));
         return ret;
     }
 
@@ -34,11 +44,22 @@ esp_err_t hpc_init(void) {
  * @return ESP_OK on success
  */
 esp_err_t hpc_start(void) {
-    esp_err_t ret = protocol_start();
+    esp_err_t ret;
+    
+    // Start heat pump protocol
+    ret = protocol_start();
     if (ret != ESP_OK) {
         ESP_LOGE(TAG, "Failed to start protocol: %s", esp_err_to_name(ret));
         return ret;
     }
+
+    // Start Modbus slave
+    ret = modbus_slave_start();
+    if (ret != ESP_OK) {
+        ESP_LOGE(TAG, "Failed to start Modbus slave: %s", esp_err_to_name(ret));
+        return ret;
+    }
+
     return ESP_OK;
 }
 
