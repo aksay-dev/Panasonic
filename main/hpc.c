@@ -85,7 +85,6 @@ esp_err_t hpc_start(void) {
 
     ESP_LOGI(TAG, "HPC application version %s started successfully", HPC_VERSION_STRING);
 
-    // test_decoder disabled
 
     // Keep main task alive
     while (1) {

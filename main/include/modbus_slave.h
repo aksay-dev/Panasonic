@@ -11,6 +11,15 @@
 #include <stdint.h>
 #include <stdbool.h>
 #include "esp_err.h"
+#include "driver/uart.h"
+
+// Modbus communication parameters
+#define MB_PORT_NUM         UART_NUM_1    // UART1
+#define MB_DEV_SPEED        (9600)        // Baud rate
+#define MB_SLAVE_ADDR       (7)           // Slave address
+#define MB_UART_TXD         (25)          // TX pin
+#define MB_UART_RXD         (26)          // RX pin
+#define MB_UART_RTS         (23)          // RTS pin for RS485 direction control
 
 #ifdef __cplusplus
 extern "C" {
@@ -27,12 +36,6 @@ esp_err_t modbus_slave_init(void);
  * @return ESP_OK on success
  */
 esp_err_t modbus_slave_start(void);
-
-/**
- * @brief Stop Modbus RTU slave communication
- * @return ESP_OK on success
- */
-esp_err_t modbus_slave_stop(void);
 
 /**
  * @brief Update input registers from heat pump decoded data

@@ -5,9 +5,8 @@
  * @date 2025
  */
 
-#include "include/modbus_slave.h"
-#include "include/modbus_params.h"
-#include "include/decoder.h"
+#include "modbus_slave.h"
+#include "modbus_params.h"
 #include "esp_modbus_slave.h"
 #include "esp_log.h"
 #include "driver/uart.h"
@@ -20,13 +19,6 @@ static const char *TAG = "MODBUS_SLAVE";
 // Modbus slave handle
 static void *mbc_slave_handle = NULL;
 
-// Modbus communication parameters
-#define MB_PORT_NUM         UART_NUM_1    // UART1
-#define MB_DEV_SPEED        (9600)        // Baud rate
-#define MB_SLAVE_ADDR       (7)           // Slave address
-#define MB_UART_TXD         (25)          // TX pin
-#define MB_UART_RXD         (26)          // RX pin
-
 // Task handle
 static TaskHandle_t mb_task_handle = NULL;
 
@@ -35,6 +27,7 @@ static TaskHandle_t mb_task_handle = NULL;
  */
 static void modbus_task(void *pvParameters) {
     mb_param_info_t reg_info;
+    uint32_t event_count = 0;
     
     ESP_LOGI(TAG, "Modbus task started");
     
@@ -47,7 +40,14 @@ static void modbus_task(void *pvParameters) {
         
         // Check for Modbus events
         mb_event_group_t event = mbc_slave_check_event(mbc_slave_handle, 
-                                                       MB_EVENT_HOLDING_REG_WR | MB_EVENT_INPUT_REG_RD);
+                                                       MB_EVENT_HOLDING_REG_WR | MB_EVENT_INPUT_REG_RD | 
+                                                       MB_EVENT_HOLDING_REG_RD | MB_EVENT_COILS_RD | 
+                                                       MB_EVENT_COILS_WR | MB_EVENT_DISCRETE_RD);
+        
+        if (event) {
+            event_count++;
+            ESP_LOGI(TAG, "Modbus event detected! Event: 0x%04X, Count: %lu", event, event_count);
+        }
         
         if (event & MB_EVENT_HOLDING_REG_WR) {
             ESP_LOGI(TAG, "Holding register write event");
@@ -69,8 +69,20 @@ static void modbus_task(void *pvParameters) {
             }
         }
         
+        if (event & MB_EVENT_HOLDING_REG_RD) {
+            ESP_LOGI(TAG, "Holding register read event");
+        }
+        
         if (event & MB_EVENT_INPUT_REG_RD) {
-            ESP_LOGD(TAG, "Input register read event");
+            ESP_LOGI(TAG, "Input register read event");
+        }
+        
+        if (event & MB_EVENT_COILS_RD) {
+            ESP_LOGI(TAG, "Coils read event");
+        }
+        
+        if (event & MB_EVENT_DISCRETE_RD) {
+            ESP_LOGI(TAG, "Discrete inputs read event");
         }
         
         // Update every 100ms
@@ -138,13 +150,24 @@ esp_err_t modbus_slave_init(void) {
         return ret;
     }
     
-    // Set UART pins
+    // Set UART pins with RTS for RS485 direction control
     ret = uart_set_pin(MB_PORT_NUM, MB_UART_TXD, MB_UART_RXD, 
-                      UART_PIN_NO_CHANGE, UART_PIN_NO_CHANGE);
+                      MB_UART_RTS, UART_PIN_NO_CHANGE);
     if (ret != ESP_OK) {
         ESP_LOGE(TAG, "Failed to set UART pins: %s", esp_err_to_name(ret));
         return ret;
     }
+    
+    // Set UART mode to RS485 Half Duplex
+    ret = uart_set_mode(MB_PORT_NUM, UART_MODE_RS485_HALF_DUPLEX);
+    if (ret != ESP_OK) {
+        ESP_LOGE(TAG, "Failed to set UART RS485 mode: %s", esp_err_to_name(ret));
+        return ret;
+    }
+    
+    ESP_LOGI(TAG, "UART1 configured: TX=GPIO%d, RX=GPIO%d, RTS=GPIO%d, Baud=%d", 
+             MB_UART_TXD, MB_UART_RXD, MB_UART_RTS, MB_DEV_SPEED);
+    ESP_LOGI(TAG, "RS485 Half-Duplex mode enabled");
     
     ESP_LOGI(TAG, "Modbus RTU slave initialized successfully");
     ESP_LOGI(TAG, "Slave address: %d, Port: UART%d, Baud: %d", 
@@ -190,41 +213,6 @@ esp_err_t modbus_slave_start(void) {
     ESP_LOGI(TAG, "Modbus RTU slave started successfully");
     
     return ESP_OK;
-}
-
-/**
- * @brief Stop Modbus RTU slave communication
- * @return ESP_OK on success
- */
-esp_err_t modbus_slave_stop(void) {
-    esp_err_t ret = ESP_OK;
-    
-    ESP_LOGI(TAG, "Stopping Modbus RTU slave");
-    
-    // Delete task if running
-    if (mb_task_handle != NULL) {
-        vTaskDelete(mb_task_handle);
-        mb_task_handle = NULL;
-    }
-    
-    // Stop and delete Modbus controller
-    if (mbc_slave_handle != NULL) {
-        ret = mbc_slave_stop(mbc_slave_handle);
-        if (ret != ESP_OK) {
-            ESP_LOGE(TAG, "Modbus slave stop failed: %s", esp_err_to_name(ret));
-        }
-        
-        ret = mbc_slave_delete(mbc_slave_handle);
-        if (ret != ESP_OK) {
-            ESP_LOGE(TAG, "Modbus slave delete failed: %s", esp_err_to_name(ret));
-        }
-        
-        mbc_slave_handle = NULL;
-    }
-    
-    ESP_LOGI(TAG, "Modbus RTU slave stopped");
-    
-    return ret;
 }
 
 /**
