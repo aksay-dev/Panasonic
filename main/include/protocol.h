@@ -46,6 +46,7 @@ extern "C" {
 #define PROTOCOL_OPT_DATA_SIZE 20
 #define PROTOCOL_WRITE_SIZE 110
 #define PROTOCOL_OPT_WRITE_SIZE 19
+#define PROTOCOL_HANDSHAKE_DATA_SIZE 51
 
 #define PROTOCOL_OPT_AVAILABLE false
 
@@ -61,7 +62,8 @@ extern protocol_rx_t g_protocol_rx;
 typedef enum {
     PROTOCOL_PKT_READ = 0x71,
     PROTOCOL_PKT_INIT = 0x31,
-    PROTOCOL_PKT_WRITE = 0xF1
+    PROTOCOL_PKT_WRITE = 0xF1,
+    PROTOCOL_PKT_HANDSHAKE = 0x10
 } protocol_pkt_type_t;
 
 // Protocol data types

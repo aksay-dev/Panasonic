@@ -191,6 +191,9 @@ static esp_err_t protocol_process_received_data(const uint8_t *data, size_t size
             ESP_LOGE(TAG, "Failed to decode optional data: %s", esp_err_to_name(decode_ret));
         }
         
+    } else if (size == PROTOCOL_HANDSHAKE_DATA_SIZE && data[3] == PROTOCOL_PKT_HANDSHAKE) {
+        ESP_LOGI(TAG, "Received handshake data block: size=%d, type=0x%02X", size, data[3]);
+        
     } else {
         ESP_LOGW(TAG, "Unknown data block: size=%d, type=0x%02X", size, data[3]);
     }
