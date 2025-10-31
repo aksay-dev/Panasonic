@@ -9,7 +9,7 @@
 #define MODBUS_PARAMS_H
 
 #include <stdint.h>
-#include "esp_modbus_slave.h"
+#include "esp_err.h"
 
 #ifdef __cplusplus
 extern "C" {
@@ -18,15 +18,12 @@ extern "C" {
 // ============================================================================
 // INPUT REGISTERS (Read-only) - 0x0000-0x01FF
 // ============================================================================
+#define MB_REG_INPUT_START 0x0000
 
 // System information (0x0000-0x000F)
-#define MB_REG_INPUT_START          0x0000
-#define MB_INPUT_FREE_MEMORY        0x0003
-#define MB_INPUT_UPTIME_LOW         0x0004
-#define MB_INPUT_UPTIME_HIGH        0x0005
-#define MB_INPUT_STATUS             0x0006
-#define MB_INPUT_LAST_UPDATE_LOW    0x0007
-#define MB_INPUT_LAST_UPDATE_HIGH   0x0008
+#define MB_INPUT_UPTIME_LOW         0x0001
+#define MB_INPUT_UPTIME_HIGH        0x0002
+#define MB_INPUT_STATUS             0x0003
 
 // ============================================================================
 // Basic temperatures (0x0010-0x002F)
@@ -298,7 +295,7 @@ extern "C" {
 #define MB_REG_INPUT_COUNT             0x0170  // 368 registers (0x0000-0x016F)
 
 // ============================================================================
-// HOLDING REGISTERS (Read/Write) - 0x1000-0x102F
+// HOLDING REGISTERS (Read/Write) - 0x1000-0x103F
 // ============================================================================
 
 #define MB_REG_HOLDING_START            0x1000
@@ -318,6 +315,19 @@ extern "C" {
 #define MB_HOLDING_SET_RESET            0x100B
 #define MB_HOLDING_SET_ZONES            0x100C
 
+// External controls (0x100D-0x100F)
+#define MB_HOLDING_SET_EXTERNAL_CONTROL            0x100D
+#define MB_HOLDING_SET_EXTERNAL_ERROR              0x100E
+#define MB_HOLDING_SET_EXTERNAL_COMPRESSOR_CONTROL 0x100F
+
+// Additional controls (0x1010-0x1015)
+#define MB_HOLDING_SET_EXTERNAL_HEAT_COOL_CONTROL  0x1010
+#define MB_HOLDING_SET_BIVALENT_CONTROL            0x1011
+#define MB_HOLDING_SET_BIVALENT_MODE               0x1012
+#define MB_HOLDING_SET_ALT_EXTERNAL_SENSOR         0x1013
+#define MB_HOLDING_SET_EXTERNAL_PAD_HEATER         0x1014
+#define MB_HOLDING_SET_BUFFER                      0x1015
+
 // Temperature setpoints (0x1020-0x1024) - all in °C (int8)
 #define MB_HOLDING_SET_Z1_HEAT_TEMP     0x1020
 #define MB_HOLDING_SET_Z1_COOL_TEMP     0x1021
@@ -325,7 +335,44 @@ extern "C" {
 #define MB_HOLDING_SET_Z2_COOL_TEMP     0x1023
 #define MB_HOLDING_SET_DHW_TEMP         0x1024
 
-#define MB_REG_HOLDING_COUNT            0x0030  // Total holding registers
+// Deltas and timing (0x1030-0x1036)
+#define MB_HOLDING_SET_BUFFER_DELTA         0x1030
+#define MB_HOLDING_SET_FLOOR_HEAT_DELTA     0x1031
+#define MB_HOLDING_SET_FLOOR_COOL_DELTA     0x1032
+#define MB_HOLDING_SET_DHW_HEAT_DELTA       0x1033
+#define MB_HOLDING_SET_HEATER_START_DELTA   0x1034
+#define MB_HOLDING_SET_HEATER_STOP_DELTA    0x1035
+#define MB_HOLDING_SET_HEATER_DELAY_TIME    0x1036
+
+// Bivalent temperatures (advanced, °C *100 ints in decoder, but commands take int8)
+#define MB_HOLDING_SET_BIVALENT_START_TEMP      0x1037
+#define MB_HOLDING_SET_BIVALENT_AP_START_TEMP   0x1038
+#define MB_HOLDING_SET_BIVALENT_AP_STOP_TEMP    0x1039
+
+// Optional temperatures (float in commands, we pass int16 raw °C) 0x1040-0x1046
+#define MB_HOLDING_SET_POOL_TEMP            0x1040
+#define MB_HOLDING_SET_BUFFER_TEMP          0x1041
+#define MB_HOLDING_SET_Z1_ROOM_TEMP         0x1042
+#define MB_HOLDING_SET_Z1_WATER_TEMP        0x1043
+#define MB_HOLDING_SET_Z2_ROOM_TEMP         0x1044
+#define MB_HOLDING_SET_Z2_WATER_TEMP        0x1045
+#define MB_HOLDING_SET_SOLAR_TEMP           0x1046
+
+// Optional controls (0x1050-0x1055)
+#define MB_HOLDING_SET_HEAT_COOL_MODE       0x1050
+#define MB_HOLDING_SET_COMPRESSOR_STATE     0x1051
+#define MB_HOLDING_SET_SMART_GRID_MODE      0x1052
+#define MB_HOLDING_SET_EXT_THERMOSTAT_1     0x1053
+#define MB_HOLDING_SET_EXT_THERMOSTAT_2     0x1054
+#define MB_HOLDING_SET_DEMAND_CONTROL       0x1055
+
+// Curves block (write data then trigger apply)
+#define MB_HOLDING_CURVES_START             0x1060  // 16 registers (32 bytes)
+#define MB_HOLDING_CURVES_REGS              16
+#define MB_HOLDING_CURVES_APPLY             0x1070  // write any value to apply
+
+// Update total count to cover up to last defined register
+#define MB_REG_HOLDING_COUNT            0x0080  // headroom to cover new ranges
 
 // ============================================================================
 // Register data structures

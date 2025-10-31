@@ -70,6 +70,7 @@ esp_err_t modbus_params_update_inputs(void) {
     // ========================================================================
     mb_input_registers[MB_INPUT_UPTIME_LOW] = (int16_t)(g_decoded_data.last_update_time & 0xFFFF);
     mb_input_registers[MB_INPUT_UPTIME_HIGH] = (int16_t)(g_decoded_data.last_update_time >> 16);
+    mb_input_registers[MB_INPUT_STATUS] = (int16_t)g_decoded_data.heatpump_state;
 
     // ========================================================================
     // Basic temperatures (0x0010-0x002F)
@@ -409,6 +410,47 @@ esp_err_t modbus_params_process_holding_write(uint16_t reg_addr) {
             }
             break;
 
+        // External control block (0x100D-0x100F)
+        case MB_HOLDING_SET_EXTERNAL_CONTROL:
+            ret = set_external_control(value != 0);
+            break;
+        case MB_HOLDING_SET_EXTERNAL_ERROR:
+            ret = set_external_error(value != 0);
+            break;
+        case MB_HOLDING_SET_EXTERNAL_COMPRESSOR_CONTROL:
+            ret = set_external_compressor_control(value != 0);
+            break;
+
+        // Additional controls (0x1010-0x1015)
+        case MB_HOLDING_SET_EXTERNAL_HEAT_COOL_CONTROL:
+            ret = set_external_heat_cool_control(value != 0);
+            break;
+        case MB_HOLDING_SET_BIVALENT_CONTROL:
+            ret = set_bivalent_control(value != 0);
+            break;
+        case MB_HOLDING_SET_BIVALENT_MODE:
+            if (value <= 2) {
+                ret = set_bivalent_mode((uint8_t)value);
+            } else {
+                ESP_LOGW(TAG, "Invalid bivalent mode: %d (0-2)", value);
+                ret = ESP_ERR_INVALID_ARG;
+            }
+            break;
+        case MB_HOLDING_SET_ALT_EXTERNAL_SENSOR:
+            ret = set_alt_external_sensor(value != 0);
+            break;
+        case MB_HOLDING_SET_EXTERNAL_PAD_HEATER:
+            if (value <= 2) {
+                ret = set_external_pad_heater((uint8_t)value);
+            } else {
+                ESP_LOGW(TAG, "Invalid pad heater: %d (0-2)", value);
+                ret = ESP_ERR_INVALID_ARG;
+            }
+            break;
+        case MB_HOLDING_SET_BUFFER:
+            ret = set_buffer(value != 0);
+            break;
+
         // Temperature setpoints (value is raw decoded data, direct pass)
         case MB_HOLDING_SET_Z1_HEAT_TEMP:
             ret = set_z1_heat_request_temperature((int8_t)value);
@@ -428,6 +470,95 @@ esp_err_t modbus_params_process_holding_write(uint16_t reg_addr) {
             
         case MB_HOLDING_SET_DHW_TEMP:
             ret = set_DHW_temp((int8_t)value);
+            break;
+
+        // Optional temperatures (we interpret holding int16 as whole °C and pass as float)
+        case MB_HOLDING_SET_POOL_TEMP:
+            ret = set_pool_temp((float)value);
+            break;
+        case MB_HOLDING_SET_BUFFER_TEMP:
+            ret = set_buffer_temp((float)value);
+            break;
+        case MB_HOLDING_SET_Z1_ROOM_TEMP:
+            ret = set_z1_room_temp((float)value);
+            break;
+        case MB_HOLDING_SET_Z1_WATER_TEMP:
+            ret = set_z1_water_temp((float)value);
+            break;
+        case MB_HOLDING_SET_Z2_ROOM_TEMP:
+            ret = set_z2_room_temp((float)value);
+            break;
+        case MB_HOLDING_SET_Z2_WATER_TEMP:
+            ret = set_z2_water_temp((float)value);
+            break;
+        case MB_HOLDING_SET_SOLAR_TEMP:
+            ret = set_solar_temp((float)value);
+            break;
+
+        // Optional controls
+        case MB_HOLDING_SET_HEAT_COOL_MODE:
+            ret = set_heat_cool_mode(value != 0);
+            break;
+        case MB_HOLDING_SET_COMPRESSOR_STATE:
+            ret = set_compressor_state(value != 0);
+            break;
+        case MB_HOLDING_SET_SMART_GRID_MODE:
+            ret = set_smart_grid_mode((uint8_t)value);
+            break;
+        case MB_HOLDING_SET_EXT_THERMOSTAT_1:
+            ret = set_external_thermostat_1_state((uint8_t)value);
+            break;
+        case MB_HOLDING_SET_EXT_THERMOSTAT_2:
+            ret = set_external_thermostat_2_state((uint8_t)value);
+            break;
+        case MB_HOLDING_SET_DEMAND_CONTROL:
+            ret = set_demand_control((uint8_t)value);
+            break;
+
+        // Curves apply: read block 0x1060.. and invoke set_curves
+        case MB_HOLDING_CURVES_APPLY: {
+            uint8_t curves_bytes[MB_HOLDING_CURVES_REGS * 2];
+            for (int i = 0; i < MB_HOLDING_CURVES_REGS; ++i) {
+                int16_t reg = mb_holding_registers[(MB_HOLDING_CURVES_START - MB_REG_HOLDING_START) + i];
+                curves_bytes[i * 2] = (uint8_t)((reg >> 8) & 0xFF);
+                curves_bytes[i * 2 + 1] = (uint8_t)(reg & 0xFF);
+            }
+            ret = set_curves(curves_bytes);
+            break;
+        }
+
+        // Deltas and timing (0x1030-0x1036) - int8 degrees or minutes
+        case MB_HOLDING_SET_BUFFER_DELTA:
+            ret = set_buffer_delta((int8_t)value);
+            break;
+        case MB_HOLDING_SET_FLOOR_HEAT_DELTA:
+            ret = set_floor_heat_delta((int8_t)value);
+            break;
+        case MB_HOLDING_SET_FLOOR_COOL_DELTA:
+            ret = set_floor_cool_delta((int8_t)value);
+            break;
+        case MB_HOLDING_SET_DHW_HEAT_DELTA:
+            ret = set_dhw_heat_delta((int8_t)value);
+            break;
+        case MB_HOLDING_SET_HEATER_START_DELTA:
+            ret = set_heater_start_delta((int8_t)value);
+            break;
+        case MB_HOLDING_SET_HEATER_STOP_DELTA:
+            ret = set_heater_stop_delta((int8_t)value);
+            break;
+        case MB_HOLDING_SET_HEATER_DELAY_TIME:
+            ret = set_heater_delay_time((uint8_t)value);
+            break;
+
+        // Bivalent temperatures (commands accept int8 setpoints)
+        case MB_HOLDING_SET_BIVALENT_START_TEMP:
+            ret = set_bivalent_start_temp((int8_t)value);
+            break;
+        case MB_HOLDING_SET_BIVALENT_AP_START_TEMP:
+            ret = set_bivalent_ap_start_temp((int8_t)value);
+            break;
+        case MB_HOLDING_SET_BIVALENT_AP_STOP_TEMP:
+            ret = set_bivalent_ap_stop_temp((int8_t)value);
             break;
 
         default:
