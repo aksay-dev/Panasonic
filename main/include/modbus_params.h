@@ -9,7 +9,10 @@
 #define MODBUS_PARAMS_H
 
 #include <stdint.h>
+#include <stdbool.h>
 #include "esp_err.h"
+#include "freertos/FreeRTOS.h"
+#include "freertos/task.h"
 
 #ifdef __cplusplus
 extern "C" {
@@ -21,8 +24,6 @@ extern "C" {
 #define MB_REG_INPUT_START 0x0000
 
 // System information (0x0000-0x000F)
-#define MB_INPUT_UPTIME_LOW         0x0001
-#define MB_INPUT_UPTIME_HIGH        0x0002
 #define MB_INPUT_STATUS             0x0003
 
 // ============================================================================
@@ -403,6 +404,26 @@ esp_err_t modbus_params_update_inputs(void);
  * @return ESP_OK on success
  */
 esp_err_t modbus_params_process_holding_write(uint16_t reg_addr);
+
+/**
+ * @brief Helper function to copy string to Modbus registers (2 bytes per register)
+ * @param dest_reg Start register index
+ * @param src Source string
+ * @param max_len Maximum string length
+ */
+void copy_string_to_registers(uint16_t dest_reg, const char *src, size_t max_len);
+
+/**
+ * @brief Lock registers mutex (call before accessing registers)
+ * @param timeout Time to wait for mutex (use portMAX_DELAY for infinite wait)
+ * @return true if lock acquired, false on timeout
+ */
+bool mb_registers_lock(TickType_t timeout);
+
+/**
+ * @brief Unlock registers mutex (call after accessing registers)
+ */
+void mb_registers_unlock(void);
 
 #ifdef __cplusplus
 }

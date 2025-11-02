@@ -270,13 +270,6 @@ esp_err_t protocol_init(void) {
 
     ESP_LOGI(TAG, "Initializing heat pump protocol");
 
-    // Initialize decoder
-    ret = decoder_init();
-    if (ret != ESP_OK) {
-        ESP_LOGE(TAG, "Failed to initialize decoder: %s", esp_err_to_name(ret));
-        return ret;
-    }
-
     // Configure UART
     uart_config_t uart_config = (uart_config_t) {
         .baud_rate = PROTOCOL_BAUD_RATE,

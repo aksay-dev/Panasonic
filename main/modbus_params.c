@@ -9,6 +9,8 @@
 #include "include/decoder.h"
 #include "include/commands.h"
 #include "esp_log.h"
+#include "freertos/FreeRTOS.h"
+#include "freertos/semphr.h"
 #include <string.h>
 
 static const char *TAG = "MODBUS_PARAMS";
@@ -19,11 +21,21 @@ static const char *TAG = "MODBUS_PARAMS";
 int16_t mb_input_registers[MB_REG_INPUT_COUNT] = {0};
 int16_t mb_holding_registers[MB_REG_HOLDING_COUNT] = {0};
 
+// Mutex to protect register access (shared resource between decoder task and Modbus task)
+static SemaphoreHandle_t mb_registers_mutex = NULL;
+
 /**
  * @brief Initialize Modbus parameter structures
  * @return ESP_OK on success
  */
 esp_err_t modbus_params_init(void) {
+    // Create mutex to protect register access
+    mb_registers_mutex = xSemaphoreCreateMutex();
+    if (mb_registers_mutex == NULL) {
+        ESP_LOGE(TAG, "Failed to create registers mutex");
+        return ESP_ERR_NO_MEM;
+    }
+    
     // Clear all registers
     memset(mb_input_registers, 0, sizeof(mb_input_registers));
     memset(mb_holding_registers, 0, sizeof(mb_holding_registers));
@@ -35,12 +47,36 @@ esp_err_t modbus_params_init(void) {
 }
 
 /**
+ * @brief Lock registers mutex (call before accessing registers)
+ * @return true if lock acquired, false on timeout
+ * @note Use portMAX_DELAY for infinite wait
+ */
+bool mb_registers_lock(TickType_t timeout) {
+    if (mb_registers_mutex == NULL) {
+        ESP_LOGE(TAG, "Registers mutex not initialized");
+        return false;
+    }
+    return xSemaphoreTake(mb_registers_mutex, timeout) == pdTRUE;
+}
+
+/**
+ * @brief Unlock registers mutex (call after accessing registers)
+ */
+void mb_registers_unlock(void) {
+    if (mb_registers_mutex == NULL) {
+        ESP_LOGE(TAG, "Registers mutex not initialized");
+        return;
+    }
+    xSemaphoreGive(mb_registers_mutex);
+}
+
+/**
  * @brief Helper function to copy string to Modbus registers (2 bytes per register)
  * @param dest_reg Start register index
  * @param src Source string
  * @param max_len Maximum string length
  */
-static void copy_string_to_registers(uint16_t dest_reg, const char *src, size_t max_len) {
+void copy_string_to_registers(uint16_t dest_reg, const char *src, size_t max_len) {
     size_t len = strlen(src);
     if (len > max_len) {
         len = max_len;
@@ -59,263 +95,16 @@ static void copy_string_to_registers(uint16_t dest_reg, const char *src, size_t 
  * @return ESP_OK on success
  */
 esp_err_t modbus_params_update_inputs(void) {
-    // Check if decoded data is valid
-    if (!g_decoded_data.data_valid) {
-        ESP_LOGD(TAG, "Decoded data not valid, skipping register update");
-        return ESP_ERR_INVALID_STATE;
-    }
+    // NOTE: This function is kept for compatibility, but most data is now written
+    // directly to Modbus registers in decode_main_data(), decode_extra_data(), 
+    // and decode_opt_data(). Only system-level updates would go here if needed.
 
-    // ========================================================================
-    // System information (0x0000-0x000F)
-    // ========================================================================
-    mb_input_registers[MB_INPUT_UPTIME_LOW] = (int16_t)(g_decoded_data.last_update_time & 0xFFFF);
-    mb_input_registers[MB_INPUT_UPTIME_HIGH] = (int16_t)(g_decoded_data.last_update_time >> 16);
-    mb_input_registers[MB_INPUT_STATUS] = (int16_t)g_decoded_data.heatpump_state;
-
-    // ========================================================================
-    // Basic temperatures (0x0010-0x002F)
-    // ========================================================================
-    // int16_t types (already * 100)
-    mb_input_registers[MB_INPUT_MAIN_INLET_TEMP] = g_decoded_data.main_inlet_temp;
-    mb_input_registers[MB_INPUT_MAIN_OUTLET_TEMP] = g_decoded_data.main_outlet_temp;
+    // All main data is now written directly in decode_main_data()
+    // All extra data is now written directly in decode_extra_data()
+    // All optional data is now written directly in decode_opt_data()
     
-    // int8_t types (whole degrees)
-    mb_input_registers[MB_INPUT_MAIN_TARGET_TEMP] = (int16_t)g_decoded_data.main_target_temp;
-    mb_input_registers[MB_INPUT_DHW_TEMP] = (int16_t)g_decoded_data.dhw_temp;
-    mb_input_registers[MB_INPUT_DHW_TARGET_TEMP] = (int16_t)g_decoded_data.dhw_target_temp;
-    mb_input_registers[MB_INPUT_OUTSIDE_TEMP] = (int16_t)g_decoded_data.outside_temp;
-    mb_input_registers[MB_INPUT_ROOM_THERMOSTAT_TEMP] = (int16_t)g_decoded_data.room_thermostat_temp;
-    mb_input_registers[MB_INPUT_BUFFER_TEMP] = (int16_t)g_decoded_data.buffer_temp;
-    mb_input_registers[MB_INPUT_SOLAR_TEMP] = (int16_t)g_decoded_data.solar_temp;
-    mb_input_registers[MB_INPUT_POOL_TEMP] = (int16_t)g_decoded_data.pool_temp;
-
-    // ========================================================================
-    // Additional temperatures (0x0020-0x003F)
-    // ========================================================================
-    mb_input_registers[MB_INPUT_MAIN_HEX_OUTLET_TEMP] = (int16_t)g_decoded_data.main_hex_outlet_temp;
-    mb_input_registers[MB_INPUT_DISCHARGE_TEMP] = (int16_t)g_decoded_data.discharge_temp;
-    mb_input_registers[MB_INPUT_INSIDE_PIPE_TEMP] = (int16_t)g_decoded_data.inside_pipe_temp;
-    mb_input_registers[MB_INPUT_DEFROST_TEMP] = (int16_t)g_decoded_data.defrost_temp;
-    mb_input_registers[MB_INPUT_EVA_OUTLET_TEMP] = (int16_t)g_decoded_data.eva_outlet_temp;
-    mb_input_registers[MB_INPUT_BYPASS_OUTLET_TEMP] = (int16_t)g_decoded_data.bypass_outlet_temp;
-    mb_input_registers[MB_INPUT_IPM_TEMP] = (int16_t)g_decoded_data.ipm_temp;
-    mb_input_registers[MB_INPUT_OUTSIDE_PIPE_TEMP] = (int16_t)g_decoded_data.outside_pipe_temp;
-    mb_input_registers[MB_INPUT_Z1_ROOM_TEMP] = (int16_t)g_decoded_data.z1_temp;
-    mb_input_registers[MB_INPUT_Z2_ROOM_TEMP] = (int16_t)g_decoded_data.z2_temp;
-    mb_input_registers[MB_INPUT_Z1_WATER_TEMP] = (int16_t)g_decoded_data.z1_water_temp;
-    mb_input_registers[MB_INPUT_Z2_WATER_TEMP] = (int16_t)g_decoded_data.z2_water_temp;
-    mb_input_registers[MB_INPUT_Z1_WATER_TARGET_TEMP] = (int16_t)g_decoded_data.z1_water_target_temp;
-    mb_input_registers[MB_INPUT_Z2_WATER_TARGET_TEMP] = (int16_t)g_decoded_data.z2_water_target_temp;
-    mb_input_registers[MB_INPUT_SECOND_INLET_TEMP] = (int16_t)g_decoded_data.second_inlet_temp;
-    mb_input_registers[MB_INPUT_ECONOMIZER_OUTLET_TEMP] = (int16_t)g_decoded_data.economizer_outlet_temp;
-    mb_input_registers[MB_INPUT_SECOND_ROOM_THERMO_TEMP] = (int16_t)g_decoded_data.second_room_thermostat_temp;
-
-    // ========================================================================
-    // Zone temperature requests (0x0040-0x004F)
-    // ========================================================================
-    mb_input_registers[MB_INPUT_Z1_HEAT_REQUEST_TEMP] = (int16_t)g_decoded_data.z1_heat_request_temp;
-    mb_input_registers[MB_INPUT_Z1_COOL_REQUEST_TEMP] = (int16_t)g_decoded_data.z1_cool_request_temp;
-    mb_input_registers[MB_INPUT_Z2_HEAT_REQUEST_TEMP] = (int16_t)g_decoded_data.z2_heat_request_temp;
-    mb_input_registers[MB_INPUT_Z2_COOL_REQUEST_TEMP] = (int16_t)g_decoded_data.z2_cool_request_temp;
-
-    // ========================================================================
-    // Zone 1 heating curve (0x0050-0x0053)
-    // ========================================================================
-    mb_input_registers[MB_INPUT_Z1_HEAT_CURVE_TARGET_HIGH] = (int16_t)g_decoded_data.z1_heat_curve_target_high_temp;
-    mb_input_registers[MB_INPUT_Z1_HEAT_CURVE_TARGET_LOW] = (int16_t)g_decoded_data.z1_heat_curve_target_low_temp;
-    mb_input_registers[MB_INPUT_Z1_HEAT_CURVE_OUTSIDE_HIGH] = (int16_t)g_decoded_data.z1_heat_curve_outside_high_temp;
-    mb_input_registers[MB_INPUT_Z1_HEAT_CURVE_OUTSIDE_LOW] = (int16_t)g_decoded_data.z1_heat_curve_outside_low_temp;
-
-    // Zone 1 cooling curve (0x0054-0x0057)
-    mb_input_registers[MB_INPUT_Z1_COOL_CURVE_TARGET_HIGH] = (int16_t)g_decoded_data.z1_cool_curve_target_high_temp;
-    mb_input_registers[MB_INPUT_Z1_COOL_CURVE_TARGET_LOW] = (int16_t)g_decoded_data.z1_cool_curve_target_low_temp;
-    mb_input_registers[MB_INPUT_Z1_COOL_CURVE_OUTSIDE_HIGH] = (int16_t)g_decoded_data.z1_cool_curve_outside_high_temp;
-    mb_input_registers[MB_INPUT_Z1_COOL_CURVE_OUTSIDE_LOW] = (int16_t)g_decoded_data.z1_cool_curve_outside_low_temp;
-
-    // ========================================================================
-    // Zone 2 heating curve (0x0060-0x0063)
-    // ========================================================================
-    mb_input_registers[MB_INPUT_Z2_HEAT_CURVE_TARGET_HIGH] = (int16_t)g_decoded_data.z2_heat_curve_target_high_temp;
-    mb_input_registers[MB_INPUT_Z2_HEAT_CURVE_TARGET_LOW] = (int16_t)g_decoded_data.z2_heat_curve_target_low_temp;
-    mb_input_registers[MB_INPUT_Z2_HEAT_CURVE_OUTSIDE_HIGH] = (int16_t)g_decoded_data.z2_heat_curve_outside_high_temp;
-    mb_input_registers[MB_INPUT_Z2_HEAT_CURVE_OUTSIDE_LOW] = (int16_t)g_decoded_data.z2_heat_curve_outside_low_temp;
-
-    // Zone 2 cooling curve (0x0064-0x0067)
-    mb_input_registers[MB_INPUT_Z2_COOL_CURVE_TARGET_HIGH] = (int16_t)g_decoded_data.z2_cool_curve_target_high_temp;
-    mb_input_registers[MB_INPUT_Z2_COOL_CURVE_TARGET_LOW] = (int16_t)g_decoded_data.z2_cool_curve_target_low_temp;
-    mb_input_registers[MB_INPUT_Z2_COOL_CURVE_OUTSIDE_HIGH] = (int16_t)g_decoded_data.z2_cool_curve_outside_high_temp;
-    mb_input_registers[MB_INPUT_Z2_COOL_CURVE_OUTSIDE_LOW] = (int16_t)g_decoded_data.z2_cool_curve_outside_low_temp;
-
-    // ========================================================================
-    // Power and energy (0x0070-0x007F)
-    // ========================================================================
-    mb_input_registers[MB_INPUT_HEAT_POWER_PRODUCTION] = (int16_t)g_decoded_data.heat_power_production;
-    mb_input_registers[MB_INPUT_HEAT_POWER_CONSUMPTION] = (int16_t)g_decoded_data.heat_power_consumption;
-    mb_input_registers[MB_INPUT_COOL_POWER_PRODUCTION] = (int16_t)g_decoded_data.cool_power_production;
-    mb_input_registers[MB_INPUT_COOL_POWER_CONSUMPTION] = (int16_t)g_decoded_data.cool_power_consumption;
-    mb_input_registers[MB_INPUT_DHW_POWER_PRODUCTION] = (int16_t)g_decoded_data.dhw_power_production;
-    mb_input_registers[MB_INPUT_DHW_POWER_CONSUMPTION] = (int16_t)g_decoded_data.dhw_power_consumption;
-
-    // Extra power data (XTOP0-5)
-    mb_input_registers[MB_INPUT_HEAT_POWER_CONSUMPTION_EXTRA] = (int16_t)g_decoded_data.heat_power_consumption_extra;
-    mb_input_registers[MB_INPUT_COOL_POWER_CONSUMPTION_EXTRA] = (int16_t)g_decoded_data.cool_power_consumption_extra;
-    mb_input_registers[MB_INPUT_DHW_POWER_CONSUMPTION_EXTRA] = (int16_t)g_decoded_data.dhw_power_consumption_extra;
-    mb_input_registers[MB_INPUT_HEAT_POWER_PRODUCTION_EXTRA] = (int16_t)g_decoded_data.heat_power_production_extra;
-    mb_input_registers[MB_INPUT_COOL_POWER_PRODUCTION_EXTRA] = (int16_t)g_decoded_data.cool_power_production_extra;
-    mb_input_registers[MB_INPUT_DHW_POWER_PRODUCTION_EXTRA] = (int16_t)g_decoded_data.dhw_power_production_extra;
-
-    // ========================================================================
-    // Technical parameters (0x0080-0x009F)
-    // ========================================================================
-    mb_input_registers[MB_INPUT_COMPRESSOR_FREQ] = (int16_t)g_decoded_data.compressor_freq;
-    mb_input_registers[MB_INPUT_PUMP_FLOW] = g_decoded_data.pump_flow;  // int16 (*100)
-    mb_input_registers[MB_INPUT_OPERATIONS_HOURS] = (int16_t)g_decoded_data.operations_hours;
-    mb_input_registers[MB_INPUT_OPERATIONS_COUNTER] = (int16_t)g_decoded_data.operations_counter;
-    mb_input_registers[MB_INPUT_FAN1_MOTOR_SPEED] = (int16_t)g_decoded_data.fan1_motor_speed;
-    mb_input_registers[MB_INPUT_FAN2_MOTOR_SPEED] = (int16_t)g_decoded_data.fan2_motor_speed;
-    mb_input_registers[MB_INPUT_HIGH_PRESSURE] = g_decoded_data.high_pressure;  // int16 (*100)
-    mb_input_registers[MB_INPUT_PUMP_SPEED] = (int16_t)g_decoded_data.pump_speed;
-    mb_input_registers[MB_INPUT_LOW_PRESSURE] = g_decoded_data.low_pressure;  // int16 (*100)
-    mb_input_registers[MB_INPUT_COMPRESSOR_CURRENT] = g_decoded_data.compressor_current;  // int16 (*100)
-    mb_input_registers[MB_INPUT_PUMP_DUTY] = (int16_t)g_decoded_data.pump_duty;
-    mb_input_registers[MB_INPUT_MAX_PUMP_DUTY] = (int16_t)g_decoded_data.max_pump_duty;
-
-    // ========================================================================
-    // Operation states (0x00A0-0x00AF)
-    // ========================================================================
-    mb_input_registers[MB_INPUT_HEATPUMP_STATE] = (int16_t)g_decoded_data.heatpump_state;
-    mb_input_registers[MB_INPUT_FORCE_DHW_STATE] = (int16_t)g_decoded_data.force_dhw_state;
-    mb_input_registers[MB_INPUT_OPERATING_MODE_STATE] = (int16_t)g_decoded_data.operating_mode_state;
-    mb_input_registers[MB_INPUT_QUIET_MODE_SCHEDULE] = (int16_t)g_decoded_data.quiet_mode_schedule;
-    mb_input_registers[MB_INPUT_POWERFUL_MODE_TIME] = (int16_t)g_decoded_data.powerful_mode_time;
-    mb_input_registers[MB_INPUT_QUIET_MODE_LEVEL] = (int16_t)g_decoded_data.quiet_mode_level;
-    mb_input_registers[MB_INPUT_HOLIDAY_MODE_STATE] = (int16_t)g_decoded_data.holiday_mode_state;
-    mb_input_registers[MB_INPUT_THREE_WAY_VALVE_STATE] = (int16_t)g_decoded_data.three_way_valve_state;
-    mb_input_registers[MB_INPUT_DEFROSTING_STATE] = (int16_t)g_decoded_data.defrosting_state;
-    mb_input_registers[MB_INPUT_MAIN_SCHEDULE_STATE] = (int16_t)g_decoded_data.main_schedule_state;
-    mb_input_registers[MB_INPUT_ZONES_STATE] = (int16_t)g_decoded_data.zones_state;
-
-    // ========================================================================
-    // Heaters and sterilization (0x00B0-0x00BF)
-    // ========================================================================
-    mb_input_registers[MB_INPUT_DHW_HEATER_STATE] = (int16_t)g_decoded_data.dhw_heater_state;
-    mb_input_registers[MB_INPUT_ROOM_HEATER_STATE] = (int16_t)g_decoded_data.room_heater_state;
-    mb_input_registers[MB_INPUT_INTERNAL_HEATER_STATE] = (int16_t)g_decoded_data.internal_heater_state;
-    mb_input_registers[MB_INPUT_EXTERNAL_HEATER_STATE] = (int16_t)g_decoded_data.external_heater_state;
-    mb_input_registers[MB_INPUT_FORCE_HEATER_STATE] = (int16_t)g_decoded_data.force_heater_state;
-    mb_input_registers[MB_INPUT_STERILIZATION_STATE] = (int16_t)g_decoded_data.sterilization_state;
-    mb_input_registers[MB_INPUT_STERILIZATION_TEMP] = g_decoded_data.sterilization_temp;  // int16 (*100)
-    mb_input_registers[MB_INPUT_STERILIZATION_MAX_TIME] = (int16_t)g_decoded_data.sterilization_max_time;
-
-    // ========================================================================
-    // Deltas and shifts (0x00C0-0x00CF) - all int16 (*100)
-    // ========================================================================
-    mb_input_registers[MB_INPUT_DHW_HEAT_DELTA] = g_decoded_data.dhw_heat_delta;
-    mb_input_registers[MB_INPUT_HEAT_DELTA] = g_decoded_data.heat_delta;
-    mb_input_registers[MB_INPUT_COOL_DELTA] = g_decoded_data.cool_delta;
-    mb_input_registers[MB_INPUT_DHW_HOLIDAY_SHIFT_TEMP] = g_decoded_data.dhw_holiday_shift_temp;
-    mb_input_registers[MB_INPUT_ROOM_HOLIDAY_SHIFT_TEMP] = g_decoded_data.room_holiday_shift_temp;
-    mb_input_registers[MB_INPUT_BUFFER_TANK_DELTA] = g_decoded_data.buffer_tank_delta;
-
-    // ========================================================================
-    // Heating/Cooling mode settings (0x00D0-0x00DF)
-    // ========================================================================
-    mb_input_registers[MB_INPUT_HEATING_MODE] = (int16_t)g_decoded_data.heating_mode;
-    mb_input_registers[MB_INPUT_HEATING_OFF_OUTDOOR_TEMP] = g_decoded_data.heating_off_outdoor_temp;  // int16 (*100)
-    mb_input_registers[MB_INPUT_HEATER_ON_OUTDOOR_TEMP] = g_decoded_data.heater_on_outdoor_temp;  // int16 (*100)
-    mb_input_registers[MB_INPUT_HEAT_TO_COOL_TEMP] = g_decoded_data.heat_to_cool_temp;  // int16 (*100)
-    mb_input_registers[MB_INPUT_COOL_TO_HEAT_TEMP] = g_decoded_data.cool_to_heat_temp;  // int16 (*100)
-    mb_input_registers[MB_INPUT_COOLING_MODE] = (int16_t)g_decoded_data.cooling_mode;
-
-    // ========================================================================
-    // Solar and buffer settings (0x00E0-0x00EF)
-    // ========================================================================
-    mb_input_registers[MB_INPUT_BUFFER_INSTALLED] = (int16_t)g_decoded_data.buffer_installed;
-    mb_input_registers[MB_INPUT_DHW_INSTALLED] = (int16_t)g_decoded_data.dhw_installed;
-    mb_input_registers[MB_INPUT_SOLAR_MODE] = (int16_t)g_decoded_data.solar_mode;
-    mb_input_registers[MB_INPUT_SOLAR_ON_DELTA] = g_decoded_data.solar_on_delta;  // int16 (*100)
-    mb_input_registers[MB_INPUT_SOLAR_OFF_DELTA] = g_decoded_data.solar_off_delta;  // int16 (*100)
-    mb_input_registers[MB_INPUT_SOLAR_FROST_PROTECTION] = g_decoded_data.solar_frost_protection;  // int16 (*100)
-    mb_input_registers[MB_INPUT_SOLAR_HIGH_LIMIT] = g_decoded_data.solar_high_limit;  // int16 (*100)
-
-    // ========================================================================
-    // Pump and liquid settings (0x00F0-0x00FF)
-    // ========================================================================
-    mb_input_registers[MB_INPUT_PUMP_FLOWRATE_MODE] = (int16_t)g_decoded_data.pump_flowrate_mode;
-    mb_input_registers[MB_INPUT_LIQUID_TYPE] = (int16_t)g_decoded_data.liquid_type;
-    mb_input_registers[MB_INPUT_ALT_EXTERNAL_SENSOR] = (int16_t)g_decoded_data.alt_external_sensor;
-    mb_input_registers[MB_INPUT_ANTI_FREEZE_MODE] = (int16_t)g_decoded_data.anti_freeze_mode;
-    mb_input_registers[MB_INPUT_OPTIONAL_PCB] = (int16_t)g_decoded_data.optional_pcb;
-    mb_input_registers[MB_INPUT_Z1_SENSOR_SETTINGS] = (int16_t)g_decoded_data.z1_sensor_settings;
-    mb_input_registers[MB_INPUT_Z2_SENSOR_SETTINGS] = (int16_t)g_decoded_data.z2_sensor_settings;
-
-    // ========================================================================
-    // External controls (0x0100-0x010F)
-    // ========================================================================
-    mb_input_registers[MB_INPUT_EXTERNAL_PAD_HEATER] = (int16_t)g_decoded_data.external_pad_heater;
-    mb_input_registers[MB_INPUT_WATER_PRESSURE] = g_decoded_data.water_pressure;  // int16 (*100)
-    mb_input_registers[MB_INPUT_EXTERNAL_CONTROL] = (int16_t)g_decoded_data.external_control;
-    mb_input_registers[MB_INPUT_EXTERNAL_HEAT_COOL_CONTROL] = (int16_t)g_decoded_data.external_heat_cool_control;
-    mb_input_registers[MB_INPUT_EXTERNAL_ERROR_SIGNAL] = (int16_t)g_decoded_data.external_error_signal;
-    mb_input_registers[MB_INPUT_EXTERNAL_COMPRESSOR_CONTROL] = (int16_t)g_decoded_data.external_compressor_control;
-
-    // ========================================================================
-    // Pump and valve states (0x0110-0x011F)
-    // ========================================================================
-    mb_input_registers[MB_INPUT_Z2_PUMP_STATE] = (int16_t)g_decoded_data.z2_pump_state;
-    mb_input_registers[MB_INPUT_Z1_PUMP_STATE] = (int16_t)g_decoded_data.z1_pump_state;
-    mb_input_registers[MB_INPUT_TWO_WAY_VALVE_STATE] = (int16_t)g_decoded_data.two_way_valve_state;
-    mb_input_registers[MB_INPUT_THREE_WAY_VALVE_STATE2] = (int16_t)g_decoded_data.three_way_valve_state2;
-    mb_input_registers[MB_INPUT_Z1_VALVE_PID] = g_decoded_data.z1_valve_pid;  // int16 (*100)
-    mb_input_registers[MB_INPUT_Z2_VALVE_PID] = g_decoded_data.z2_valve_pid;  // int16 (*100)
-
-    // ========================================================================
-    // Bivalent settings (0x0120-0x012F)
-    // ========================================================================
-    mb_input_registers[MB_INPUT_BIVALENT_CONTROL] = (int16_t)g_decoded_data.bivalent_control;
-    mb_input_registers[MB_INPUT_BIVALENT_MODE] = (int16_t)g_decoded_data.bivalent_mode;
-    mb_input_registers[MB_INPUT_BIVALENT_START_TEMP] = g_decoded_data.bivalent_start_temp;  // int16 (*100)
-    mb_input_registers[MB_INPUT_BIVALENT_ADVANCED_HEAT] = (int16_t)g_decoded_data.bivalent_advanced_heat;
-    mb_input_registers[MB_INPUT_BIVALENT_ADVANCED_DHW] = (int16_t)g_decoded_data.bivalent_advanced_dhw;
-    mb_input_registers[MB_INPUT_BIVALENT_ADVANCED_START_TEMP] = g_decoded_data.bivalent_advanced_start_temp;  // int16 (*100)
-    mb_input_registers[MB_INPUT_BIVALENT_ADVANCED_STOP_TEMP] = g_decoded_data.bivalent_advanced_stop_temp;  // int16 (*100)
-    mb_input_registers[MB_INPUT_BIVALENT_ADVANCED_START_DELAY] = (int16_t)g_decoded_data.bivalent_advanced_start_delay;
-    mb_input_registers[MB_INPUT_BIVALENT_ADVANCED_STOP_DELAY] = (int16_t)g_decoded_data.bivalent_advanced_stop_delay;
-    mb_input_registers[MB_INPUT_BIVALENT_ADVANCED_DHW_DELAY] = (int16_t)g_decoded_data.bivalent_advanced_dhw_delay;
-
-    // ========================================================================
-    // Heater timing settings (0x0130-0x013F)
-    // ========================================================================
-    mb_input_registers[MB_INPUT_HEATER_DELAY_TIME] = (int16_t)g_decoded_data.heater_delay_time;
-    mb_input_registers[MB_INPUT_HEATER_START_DELTA] = g_decoded_data.heater_start_delta;  // int16 (*100)
-    mb_input_registers[MB_INPUT_HEATER_STOP_DELTA] = g_decoded_data.heater_stop_delta;  // int16 (*100)
-
-    // ========================================================================
-    // Error state (0x0140-0x0147) - 16 bytes in 8 registers
-    // ========================================================================
-    copy_string_to_registers(MB_INPUT_ERROR_STATE_0, g_decoded_data.error_state, 16);
-
-    // ========================================================================
-    // Heat pump model (0x0148-0x0157) - 32 bytes in 16 registers
-    // ========================================================================
-    copy_string_to_registers(MB_INPUT_HP_MODEL_0, g_decoded_data.heat_pump_model, 32);
-
-    // ========================================================================
-    // Operation hours (0x0158-0x015F)
-    // ========================================================================
-    mb_input_registers[MB_INPUT_ROOM_HEATER_OPS_HOURS] = (int16_t)g_decoded_data.room_heater_operations_hours;
-    mb_input_registers[MB_INPUT_DHW_HEATER_OPS_HOURS] = (int16_t)g_decoded_data.dhw_heater_operations_hours;
-
-    // ========================================================================
-    // Optional PCB data (0x0160-0x016F)
-    // ========================================================================
-    mb_input_registers[MB_INPUT_Z1_WATER_PUMP] = (int16_t)g_decoded_data.z1_water_pump;
-    mb_input_registers[MB_INPUT_Z1_MIXING_VALVE] = (int16_t)g_decoded_data.z1_mixing_valve;
-    mb_input_registers[MB_INPUT_Z2_WATER_PUMP] = (int16_t)g_decoded_data.z2_water_pump;
-    mb_input_registers[MB_INPUT_Z2_MIXING_VALVE] = (int16_t)g_decoded_data.z2_mixing_valve;
-    mb_input_registers[MB_INPUT_POOL_WATER_PUMP] = (int16_t)g_decoded_data.pool_water_pump;
-    mb_input_registers[MB_INPUT_SOLAR_WATER_PUMP] = (int16_t)g_decoded_data.solar_water_pump;
-    mb_input_registers[MB_INPUT_ALARM_STATE] = (int16_t)g_decoded_data.alarm_state;
+    // This function may be used for other updates like uptime, status flags, etc.
+    // Currently, it's essentially a no-op since all data flows directly from decoder to Modbus registers.
 
     return ESP_OK;
 }
