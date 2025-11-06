@@ -113,6 +113,26 @@ static int protocol_uart_receive(uint8_t *data, size_t max_size) {
     return uart_read_bytes(PROTOCOL_UART_NUM, data, max_size, pdMS_TO_TICKS(PROTOCOL_READ_TIMEOUT_MS));
 }
 
+
+// Вспомогательная функция минидампа массива uint8_t длиной 256 байт (16 строк по 16 байт)
+static void mini_dump(const uint8_t *data) {
+    for (int row = 0; row < 16; row++) {
+        int offset = row * 16;
+        char line[64];
+        char *p = line;
+
+        p += sprintf(p, "%04X: ", offset);
+
+        for (int i = 0; i < 16; i++) {
+            p += sprintf(p, "%02X ", data[offset + i]);
+            if (i == 7) *p++ = ' ';
+        }
+
+        *p = '\0';
+        ESP_LOGI(TAG, "%s", line);
+    }
+}
+
 /**
  * @brief Process received data
  * @param data Received data
@@ -120,6 +140,8 @@ static int protocol_uart_receive(uint8_t *data, size_t max_size) {
  * @return ESP_OK on success
  */
 static esp_err_t protocol_process_received_data(const uint8_t *data, size_t size) {
+
+    mini_dump(data);
     // Validate data size
     if (size < 3) {
         ESP_LOGW(TAG, "Received data too short: %d bytes", size);

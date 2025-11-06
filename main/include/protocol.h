@@ -29,8 +29,8 @@ extern "C" {
 #define PROTOCOL_FLOW_CTRL UART_HW_FLOWCTRL_DISABLE
 
 // GPIO pins
-#define PROTOCOL_TX_PIN 17
-#define PROTOCOL_RX_PIN 16
+#define PROTOCOL_TX_PIN 16
+#define PROTOCOL_RX_PIN 17
 
 // Timing constants
 #define PROTOCOL_READ_TIMEOUT_MS 2000
@@ -157,6 +157,12 @@ bool protocol_validate_checksum(const uint8_t *data, size_t size);
  * @param pvParameters Task parameters
  */
 void protocol_task(void *pvParameters);
+
+/**
+ * @brief Минидамп 256-байтного массива (HEX + ASCII, 16 байт на строку)
+ * @param data Указатель на массив из 256 байт
+ */
+void protocol_mini_dump_256(const uint8_t *data);
 
 #ifdef __cplusplus
 }
