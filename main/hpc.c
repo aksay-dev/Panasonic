@@ -63,6 +63,15 @@ esp_err_t hpc_start(void) {
     return ESP_OK;
 }
 
+/*
+ * @brief Restart application
+ */
+void app_restart() {
+    ESP_LOGE(TAG, "Restarting application");
+    vTaskDelay(pdMS_TO_TICKS(2000));
+    esp_restart();
+}
+
 /**
  * @brief Main application entry point
  */
@@ -73,18 +82,17 @@ esp_err_t hpc_start(void) {
     ret = hpc_init();
     if (ret != ESP_OK) {
         ESP_LOGE(TAG, "Failed to initialize hpc: %s", esp_err_to_name(ret));
-        esp_restart();
+        app_restart();
     }
 
     // Start application
     ret = hpc_start();
     if (ret != ESP_OK) {
         ESP_LOGE(TAG, "Failed to start hpc: %s", esp_err_to_name(ret));
-        esp_restart();
+        app_restart();
     }
 
     ESP_LOGI(TAG, "HPC application version %s started successfully", HPC_VERSION_STRING);
-
 
     // Keep main task alive
     while (1) {

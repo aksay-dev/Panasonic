@@ -6,8 +6,8 @@
  */
 
 #include "include/modbus_params.h"
-#include "include/decoder.h"
 #include "include/commands.h"
+#include "include/modbus_slave.h"
 #include "esp_log.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/semphr.h"
@@ -21,91 +21,206 @@ static const char *TAG = "MODBUS_PARAMS";
 int16_t mb_input_registers[MB_REG_INPUT_COUNT] = {0};
 int16_t mb_holding_registers[MB_REG_HOLDING_COUNT] = {0};
 
-// Mutex to protect register access (shared resource between decoder task and Modbus task)
-static SemaphoreHandle_t mb_registers_mutex = NULL;
+#define HOLDING_INDEX(reg)  ((reg) - MB_REG_HOLDING_START)
+
+enum {
+    IDX_MODBUS_BAUD = HOLDING_INDEX(MB_HOLDING_SET_MODBUS_BAUD),
+    IDX_MODBUS_PARITY = HOLDING_INDEX(MB_HOLDING_SET_MODBUS_PARITY),
+    IDX_MODBUS_STOP_BITS = HOLDING_INDEX(MB_HOLDING_SET_MODBUS_STOP_BITS),
+    IDX_MODBUS_DATA_BITS = HOLDING_INDEX(MB_HOLDING_SET_MODBUS_DATA_BITS),
+    IDX_MODBUS_SLAVE_ID = HOLDING_INDEX(MB_HOLDING_SET_MODBUS_SLAVE_ID)
+};
+
+static bool modbus_is_supported_baud(uint32_t baud);
+static bool modbus_decode_parity(uint16_t code, uart_parity_t *parity);
+static int16_t modbus_encode_parity(uart_parity_t parity);
+static bool modbus_decode_stop_bits(uint16_t code, uart_stop_bits_t *stop_bits);
+static int16_t modbus_encode_stop_bits(uart_stop_bits_t stop_bits);
+static bool modbus_decode_data_bits(uint16_t code, uart_word_length_t *data_bits);
+static int16_t modbus_encode_data_bits(uart_word_length_t data_bits);
+static bool modbus_is_valid_slave_id(uint32_t value);
+static void modbus_restore_serial_field(uint16_t reg_addr);
+static void modbus_sync_serial_registers(void);
+static esp_err_t modbus_build_serial_config_from_registers(modbus_serial_config_t *cfg);
+
+static bool modbus_is_supported_baud(uint32_t baud) {
+    return (baud >= 1200U && baud <= 57600U);
+}
+
+static bool modbus_decode_parity(uint16_t code, uart_parity_t *parity) {
+    if (parity == NULL) {
+        return false;
+    }
+    switch (code) {
+        case 0:
+            *parity = UART_PARITY_DISABLE;
+            return true;
+        case 1:
+            *parity = UART_PARITY_EVEN;
+            return true;
+        case 2:
+            *parity = UART_PARITY_ODD;
+            return true;
+        default:
+            return false;
+    }
+}
+
+static int16_t modbus_encode_parity(uart_parity_t parity) {
+    switch (parity) {
+        case UART_PARITY_EVEN:
+            return 1;
+        case UART_PARITY_ODD:
+            return 2;
+        case UART_PARITY_DISABLE:
+        default:
+            return 0;
+    }
+}
+
+static bool modbus_decode_stop_bits(uint16_t code, uart_stop_bits_t *stop_bits) {
+    if (stop_bits == NULL) {
+        return false;
+    }
+    switch (code) {
+        case 1:
+            *stop_bits = UART_STOP_BITS_1;
+            return true;
+        case 2:
+            *stop_bits = UART_STOP_BITS_2;
+            return true;
+        default:
+            return false;
+    }
+}
+
+static int16_t modbus_encode_stop_bits(uart_stop_bits_t stop_bits) {
+    return (stop_bits == UART_STOP_BITS_2) ? 2 : 1;
+}
+
+static bool modbus_decode_data_bits(uint16_t code, uart_word_length_t *data_bits) {
+    if (data_bits == NULL) {
+        return false;
+    }
+    switch (code) {
+        case 7:
+            *data_bits = UART_DATA_7_BITS;
+            return true;
+        case 8:
+            *data_bits = UART_DATA_8_BITS;
+            return true;
+        default:
+            return false;
+    }
+}
+
+static int16_t modbus_encode_data_bits(uart_word_length_t data_bits) {
+    return (data_bits == UART_DATA_7_BITS) ? 7 : 8;
+}
+
+static bool modbus_is_valid_slave_id(uint32_t value) {
+    return (value >= 1U && value <= 247U);
+}
+
+static void modbus_restore_serial_field(uint16_t reg_addr) {
+    modbus_serial_config_t cfg;
+    if (modbus_slave_get_serial_config(&cfg) != ESP_OK) {
+        return;
+    }
+
+    switch (reg_addr) {
+        case MB_HOLDING_SET_MODBUS_BAUD:
+            mb_holding_registers[IDX_MODBUS_BAUD] = (int16_t)(cfg.baudrate & 0xFFFF);
+            break;
+        case MB_HOLDING_SET_MODBUS_PARITY:
+            mb_holding_registers[IDX_MODBUS_PARITY] = modbus_encode_parity(cfg.parity);
+            break;
+        case MB_HOLDING_SET_MODBUS_STOP_BITS:
+            mb_holding_registers[IDX_MODBUS_STOP_BITS] = modbus_encode_stop_bits(cfg.stop_bits);
+            break;
+        case MB_HOLDING_SET_MODBUS_DATA_BITS:
+            mb_holding_registers[IDX_MODBUS_DATA_BITS] = modbus_encode_data_bits(cfg.data_bits);
+            break;
+        case MB_HOLDING_SET_MODBUS_SLAVE_ID:
+            mb_holding_registers[IDX_MODBUS_SLAVE_ID] = (int16_t)cfg.slave_addr;
+            break;
+        default:
+            break;
+    }
+}
+
+static void modbus_sync_serial_registers(void) {
+    modbus_serial_config_t cfg;
+    if (modbus_slave_get_serial_config(&cfg) != ESP_OK) {
+        return;
+    }
+
+    mb_holding_registers[IDX_MODBUS_BAUD] = (int16_t)(cfg.baudrate & 0xFFFF);
+    mb_holding_registers[IDX_MODBUS_PARITY] = modbus_encode_parity(cfg.parity);
+    mb_holding_registers[IDX_MODBUS_STOP_BITS] = modbus_encode_stop_bits(cfg.stop_bits);
+    mb_holding_registers[IDX_MODBUS_DATA_BITS] = modbus_encode_data_bits(cfg.data_bits);
+    mb_holding_registers[IDX_MODBUS_SLAVE_ID] = (int16_t)cfg.slave_addr;
+}
+
+static esp_err_t modbus_build_serial_config_from_registers(modbus_serial_config_t *cfg) {
+    if (cfg == NULL) {
+        return ESP_ERR_INVALID_ARG;
+    }
+
+    uint32_t baud = (uint16_t)mb_holding_registers[IDX_MODBUS_BAUD];
+    uart_parity_t parity;
+    uart_stop_bits_t stop_bits;
+    uart_word_length_t data_bits;
+    uint32_t slave_id = (uint16_t)mb_holding_registers[IDX_MODBUS_SLAVE_ID];
+
+    if (!modbus_is_supported_baud(baud)) {
+        ESP_LOGW(TAG, "Requested baud rate %lu not supported (1200-57600)",
+                 (unsigned long)baud);
+        return ESP_ERR_INVALID_ARG;
+    }
+    if (!modbus_decode_parity((uint16_t)mb_holding_registers[IDX_MODBUS_PARITY], &parity)) {
+        ESP_LOGW(TAG, "Requested parity code %d is invalid",
+                 mb_holding_registers[IDX_MODBUS_PARITY]);
+        return ESP_ERR_INVALID_ARG;
+    }
+    if (!modbus_decode_stop_bits((uint16_t)mb_holding_registers[IDX_MODBUS_STOP_BITS], &stop_bits)) {
+        ESP_LOGW(TAG, "Requested stop bits code %d is invalid",
+                 mb_holding_registers[IDX_MODBUS_STOP_BITS]);
+        return ESP_ERR_INVALID_ARG;
+    }
+    if (!modbus_decode_data_bits((uint16_t)mb_holding_registers[IDX_MODBUS_DATA_BITS], &data_bits)) {
+        ESP_LOGW(TAG, "Requested data bits code %d is invalid",
+                 mb_holding_registers[IDX_MODBUS_DATA_BITS]);
+        return ESP_ERR_INVALID_ARG;
+    }
+    if (!modbus_is_valid_slave_id(slave_id)) {
+        ESP_LOGW(TAG, "Requested Modbus slave id %lu invalid (1-247)",
+                 (unsigned long)slave_id);
+        return ESP_ERR_INVALID_ARG;
+    }
+
+    cfg->baudrate = baud;
+    cfg->parity = parity;
+    cfg->stop_bits = stop_bits;
+    cfg->data_bits = data_bits;
+    cfg->slave_addr = (uint8_t)slave_id;
+    return ESP_OK;
+}
 
 /**
  * @brief Initialize Modbus parameter structures
  * @return ESP_OK on success
  */
 esp_err_t modbus_params_init(void) {
-    // Create mutex to protect register access
-    mb_registers_mutex = xSemaphoreCreateMutex();
-    if (mb_registers_mutex == NULL) {
-        ESP_LOGE(TAG, "Failed to create registers mutex");
-        return ESP_ERR_NO_MEM;
-    }
-    
     // Clear all registers
     memset(mb_input_registers, 0, sizeof(mb_input_registers));
     memset(mb_holding_registers, 0, sizeof(mb_holding_registers));
+
+    modbus_sync_serial_registers();
     
     ESP_LOGI(TAG, "Modbus parameters initialized: %d input, %d holding registers",
              MB_REG_INPUT_COUNT, MB_REG_HOLDING_COUNT);
     
-    return ESP_OK;
-}
-
-/**
- * @brief Lock registers mutex (call before accessing registers)
- * @return true if lock acquired, false on timeout
- * @note Use portMAX_DELAY for infinite wait
- */
-bool mb_registers_lock(TickType_t timeout) {
-    if (mb_registers_mutex == NULL) {
-        ESP_LOGE(TAG, "Registers mutex not initialized");
-        return false;
-    }
-    return xSemaphoreTake(mb_registers_mutex, timeout) == pdTRUE;
-}
-
-/**
- * @brief Unlock registers mutex (call after accessing registers)
- */
-void mb_registers_unlock(void) {
-    if (mb_registers_mutex == NULL) {
-        ESP_LOGE(TAG, "Registers mutex not initialized");
-        return;
-    }
-    xSemaphoreGive(mb_registers_mutex);
-}
-
-/**
- * @brief Helper function to copy string to Modbus registers (2 bytes per register)
- * @param dest_reg Start register index
- * @param src Source string
- * @param max_len Maximum string length
- */
-void copy_string_to_registers(uint16_t dest_reg, const char *src, size_t max_len) {
-    size_t len = strlen(src);
-    if (len > max_len) {
-        len = max_len;
-    }
-    
-    // Copy 2 bytes per register (big-endian format)
-    for (size_t i = 0; i < max_len; i += 2) {
-        uint8_t byte1 = (i < len) ? (uint8_t)src[i] : 0;
-        uint8_t byte2 = (i + 1 < len) ? (uint8_t)src[i + 1] : 0;
-        mb_input_registers[dest_reg + i / 2] = (int16_t)((byte1 << 8) | byte2);
-    }
-}
-
-/**
- * @brief Update input registers from decoded heat pump data
- * @return ESP_OK on success
- */
-esp_err_t modbus_params_update_inputs(void) {
-    // NOTE: This function is kept for compatibility, but most data is now written
-    // directly to Modbus registers in decode_main_data(), decode_extra_data(), 
-    // and decode_opt_data(). Only system-level updates would go here if needed.
-
-    // All main data is now written directly in decode_main_data()
-    // All extra data is now written directly in decode_extra_data()
-    // All optional data is now written directly in decode_opt_data()
-    
-    // This function may be used for other updates like uptime, status flags, etc.
-    // Currently, it's essentially a no-op since all data flows directly from decoder to Modbus registers.
-
     return ESP_OK;
 }
 
@@ -349,6 +464,79 @@ esp_err_t modbus_params_process_holding_write(uint16_t reg_addr) {
         case MB_HOLDING_SET_BIVALENT_AP_STOP_TEMP:
             ret = set_bivalent_ap_stop_temp((int8_t)value);
             break;
+
+        // Modbus serial configuration commands
+        case MB_HOLDING_SET_MODBUS_BAUD: {
+            uint32_t baud = (uint16_t)mb_holding_registers[IDX_MODBUS_BAUD];
+            if (!modbus_is_supported_baud(baud)) {
+                ESP_LOGW(TAG, "Invalid Modbus baud rate request: %lu (1200-57600)",
+                         (unsigned long)baud);
+                modbus_restore_serial_field(MB_HOLDING_SET_MODBUS_BAUD);
+                ret = ESP_ERR_INVALID_ARG;
+            }
+            break;
+        }
+
+        case MB_HOLDING_SET_MODBUS_PARITY: {
+            uart_parity_t tmp;
+            if (!modbus_decode_parity((uint16_t)mb_holding_registers[IDX_MODBUS_PARITY], &tmp)) {
+                ESP_LOGW(TAG, "Invalid Modbus parity code: %d",
+                         mb_holding_registers[IDX_MODBUS_PARITY]);
+                modbus_restore_serial_field(MB_HOLDING_SET_MODBUS_PARITY);
+                ret = ESP_ERR_INVALID_ARG;
+            }
+            break;
+        }
+
+        case MB_HOLDING_SET_MODBUS_STOP_BITS: {
+            uart_stop_bits_t tmp;
+            if (!modbus_decode_stop_bits((uint16_t)mb_holding_registers[IDX_MODBUS_STOP_BITS], &tmp)) {
+                ESP_LOGW(TAG, "Invalid Modbus stop bits code: %d",
+                         mb_holding_registers[IDX_MODBUS_STOP_BITS]);
+                modbus_restore_serial_field(MB_HOLDING_SET_MODBUS_STOP_BITS);
+                ret = ESP_ERR_INVALID_ARG;
+            }
+            break;
+        }
+
+        case MB_HOLDING_SET_MODBUS_DATA_BITS: {
+            uart_word_length_t tmp;
+            if (!modbus_decode_data_bits((uint16_t)mb_holding_registers[IDX_MODBUS_DATA_BITS], &tmp)) {
+                ESP_LOGW(TAG, "Invalid Modbus data bits code: %d",
+                         mb_holding_registers[IDX_MODBUS_DATA_BITS]);
+                modbus_restore_serial_field(MB_HOLDING_SET_MODBUS_DATA_BITS);
+                ret = ESP_ERR_INVALID_ARG;
+            }
+            break;
+        }
+
+        case MB_HOLDING_SET_MODBUS_SLAVE_ID: {
+            uint32_t slave_id = (uint16_t)mb_holding_registers[IDX_MODBUS_SLAVE_ID];
+            if (!modbus_is_valid_slave_id(slave_id)) {
+                ESP_LOGW(TAG, "Invalid Modbus slave id: %lu (1-247)", (unsigned long)slave_id);
+                modbus_restore_serial_field(MB_HOLDING_SET_MODBUS_SLAVE_ID);
+                ret = ESP_ERR_INVALID_ARG;
+            }
+            break;
+        }
+
+        case MB_HOLDING_APPLY_MODBUS_SETTINGS: {
+            if (value == 0) {
+                ESP_LOGI(TAG, "Modbus settings apply requested with 0, ignoring");
+                break;
+            }
+            modbus_serial_config_t new_cfg;
+            esp_err_t build_ret = modbus_build_serial_config_from_registers(&new_cfg);
+            if (build_ret != ESP_OK) {
+                ret = build_ret;
+                break;
+            }
+            ret = modbus_slave_apply_serial_config(&new_cfg);
+            if (ret == ESP_OK) {
+                modbus_sync_serial_registers();
+            }
+            break;
+        }
 
         default:
             ESP_LOGW(TAG, "Write to unhandled register: 0x%04X", reg_addr);

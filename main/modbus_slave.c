@@ -22,6 +22,166 @@ static void *mbc_slave_handle = NULL;
 // Task handle
 static TaskHandle_t mb_task_handle = NULL;
 
+static modbus_serial_config_t current_serial_cfg = {
+    .baudrate = MB_DEV_SPEED,
+    .parity = UART_PARITY_DISABLE,
+    .stop_bits = UART_STOP_BITS_1,
+    .data_bits = UART_DATA_8_BITS,
+    .slave_addr = MB_SLAVE_ADDR
+};
+
+static bool modbus_slave_running = false;
+
+static esp_err_t modbus_slave_setup_controller(void);
+static bool modbus_slave_validate_serial_config(const modbus_serial_config_t *cfg);
+static void modbus_slave_restore_previous_controller(const modbus_serial_config_t *prev_cfg,
+                                                     bool restart_required,
+                                                     bool had_controller);
+
+static esp_err_t modbus_slave_setup_controller(void) {
+    if (mbc_slave_handle != NULL) {
+        ESP_LOGW(TAG, "Modbus controller already initialized");
+        return ESP_ERR_INVALID_STATE;
+    }
+
+    mb_communication_info_t comm_config = {
+        .ser_opts.port = MB_PORT_NUM,
+        .ser_opts.mode = MB_RTU,
+        .ser_opts.baudrate = current_serial_cfg.baudrate,
+        .ser_opts.parity = current_serial_cfg.parity,
+        .ser_opts.uid = current_serial_cfg.slave_addr,
+        .ser_opts.data_bits = current_serial_cfg.data_bits,
+        .ser_opts.stop_bits = current_serial_cfg.stop_bits
+    };
+
+    esp_err_t ret = mbc_slave_create_serial(&comm_config, &mbc_slave_handle);
+    if (ret != ESP_OK) {
+        ESP_LOGE(TAG, "Modbus slave create failed: %s", esp_err_to_name(ret));
+        return ret;
+    }
+
+    mb_register_area_descriptor_t reg_area = {
+        .type = MB_PARAM_INPUT,
+        .start_offset = MB_REG_INPUT_START,
+        .address = (void *)mb_input_registers,
+        .size = MB_REG_INPUT_COUNT * sizeof(uint16_t),
+        .access = MB_ACCESS_RO
+    };
+
+    ret = mbc_slave_set_descriptor(mbc_slave_handle, reg_area);
+    if (ret != ESP_OK) {
+        ESP_LOGE(TAG, "Failed to set input registers descriptor: %s", esp_err_to_name(ret));
+        goto cleanup;
+    }
+
+    reg_area.type = MB_PARAM_HOLDING;
+    reg_area.start_offset = MB_REG_HOLDING_START;
+    reg_area.address = (void *)mb_holding_registers;
+    reg_area.size = MB_REG_HOLDING_COUNT * sizeof(uint16_t);
+    reg_area.access = MB_ACCESS_RW;
+
+    ret = mbc_slave_set_descriptor(mbc_slave_handle, reg_area);
+    if (ret != ESP_OK) {
+        ESP_LOGE(TAG, "Failed to set holding registers descriptor: %s", esp_err_to_name(ret));
+        goto cleanup;
+    }
+
+    ret = uart_set_pin(MB_PORT_NUM, MB_UART_TXD, MB_UART_RXD, MB_UART_RTS, UART_PIN_NO_CHANGE);
+    if (ret != ESP_OK) {
+        ESP_LOGE(TAG, "Failed to set UART pins: %s", esp_err_to_name(ret));
+        goto cleanup;
+    }
+
+    ret = uart_set_mode(MB_PORT_NUM, UART_MODE_RS485_HALF_DUPLEX);
+    if (ret != ESP_OK) {
+        ESP_LOGE(TAG, "Failed to set UART RS485 mode: %s", esp_err_to_name(ret));
+        goto cleanup;
+    }
+
+    ESP_LOGI(TAG, "UART1 configured: TX=GPIO%d, RX=GPIO%d, RTS=GPIO%d, Baud=%lu",
+             MB_UART_TXD, MB_UART_RXD, MB_UART_RTS, (unsigned long)current_serial_cfg.baudrate);
+    ESP_LOGI(TAG, "RS485 Half-Duplex mode enabled");
+    ESP_LOGI(TAG, "Slave address: %u, Data bits: %d, Stop bits: %d, Parity: %d",
+             current_serial_cfg.slave_addr,
+             current_serial_cfg.data_bits,
+             current_serial_cfg.stop_bits,
+             current_serial_cfg.parity);
+    ESP_LOGI(TAG, "Input registers: 0x%04X-0x%04X (%d regs)",
+             MB_REG_INPUT_START, MB_REG_INPUT_START + MB_REG_INPUT_COUNT - 1, MB_REG_INPUT_COUNT);
+    ESP_LOGI(TAG, "Holding registers: 0x%04X-0x%04X (%d regs)",
+             MB_REG_HOLDING_START, MB_REG_HOLDING_START + MB_REG_HOLDING_COUNT - 1, MB_REG_HOLDING_COUNT);
+
+    return ESP_OK;
+
+cleanup:
+    if (mbc_slave_handle != NULL) {
+        mbc_slave_delete(mbc_slave_handle);
+        mbc_slave_handle = NULL;
+    }
+    return ret;
+}
+
+static bool modbus_slave_validate_serial_config(const modbus_serial_config_t *cfg) {
+    if (cfg == NULL) {
+        return false;
+    }
+    if (cfg->baudrate < 1200 || cfg->baudrate > 65535) {
+        return false;
+    }
+    if (cfg->slave_addr < 1 || cfg->slave_addr > 247) {
+        return false;
+    }
+    switch (cfg->parity) {
+        case UART_PARITY_DISABLE:
+        case UART_PARITY_EVEN:
+        case UART_PARITY_ODD:
+            break;
+        default:
+            return false;
+    }
+    switch (cfg->stop_bits) {
+        case UART_STOP_BITS_1:
+        case UART_STOP_BITS_2:
+            break;
+        default:
+            return false;
+    }
+    switch (cfg->data_bits) {
+        case UART_DATA_7_BITS:
+        case UART_DATA_8_BITS:
+            break;
+        default:
+            return false;
+    }
+    return true;
+}
+
+static void modbus_slave_restore_previous_controller(const modbus_serial_config_t *prev_cfg,
+                                                     bool restart_required,
+                                                     bool had_controller) {
+    if (!had_controller || prev_cfg == NULL) {
+        return;
+    }
+
+    current_serial_cfg = *prev_cfg;
+    esp_err_t ret = modbus_slave_setup_controller();
+    if (ret != ESP_OK) {
+        ESP_LOGE(TAG, "Failed to restore previous Modbus controller: %s", esp_err_to_name(ret));
+        return;
+    }
+
+    if (restart_required) {
+        ret = mbc_slave_start(mbc_slave_handle);
+        if (ret != ESP_OK) {
+            ESP_LOGE(TAG, "Failed to restart restored Modbus controller: %s", esp_err_to_name(ret));
+            (void)mbc_slave_delete(mbc_slave_handle);
+            mbc_slave_handle = NULL;
+        } else {
+            modbus_slave_running = true;
+        }
+    }
+}
+
 /**
  * @brief Modbus task - periodically update input registers and check events
  */
@@ -33,9 +193,10 @@ static void modbus_task(void *pvParameters) {
     
     while (1) {
         // Update input registers from heat pump data
-        esp_err_t ret = modbus_params_update_inputs();
-        if (ret != ESP_OK) {
-            ESP_LOGD(TAG, "Failed to update input registers: %s", esp_err_to_name(ret));
+        esp_err_t ret;
+        if (mbc_slave_handle == NULL) {
+            vTaskDelay(pdMS_TO_TICKS(100));
+            continue;
         }
         
         // Check for Modbus events
@@ -106,78 +267,13 @@ esp_err_t modbus_slave_init(void) {
         return ret;
     }
     
-    // Initialize Modbus slave controller
-    mb_communication_info_t comm_config = {
-        .ser_opts.port = MB_PORT_NUM,
-        .ser_opts.mode = MB_RTU,
-        .ser_opts.baudrate = MB_DEV_SPEED,
-        .ser_opts.parity = MB_PARITY_NONE,
-        .ser_opts.uid = MB_SLAVE_ADDR,
-        .ser_opts.data_bits = UART_DATA_8_BITS,
-        .ser_opts.stop_bits = UART_STOP_BITS_1
-    };
-    
-    ret = mbc_slave_create_serial(&comm_config, &mbc_slave_handle);
+    ret = modbus_slave_setup_controller();
     if (ret != ESP_OK) {
-        ESP_LOGE(TAG, "Modbus slave create failed: %s", esp_err_to_name(ret));
+        ESP_LOGE(TAG, "Failed to create Modbus controller: %s", esp_err_to_name(ret));
         return ret;
     }
-    
-    // Define Modbus memory areas
-    mb_register_area_descriptor_t reg_area;
-    
-    // Input registers area
-    reg_area.type = MB_PARAM_INPUT;
-    reg_area.start_offset = MB_REG_INPUT_START;
-    reg_area.address = (void *)mb_input_registers;
-    reg_area.size = MB_REG_INPUT_COUNT * sizeof(uint16_t);
-    reg_area.access = MB_ACCESS_RO;
-    ret = mbc_slave_set_descriptor(mbc_slave_handle, reg_area);
-    if (ret != ESP_OK) {
-        ESP_LOGE(TAG, "Failed to set input registers descriptor: %s", esp_err_to_name(ret));
-        return ret;
-    }
-    
-    // Holding registers area
-    reg_area.type = MB_PARAM_HOLDING;
-    reg_area.start_offset = MB_REG_HOLDING_START;
-    reg_area.address = (void *)mb_holding_registers;
-    reg_area.size = MB_REG_HOLDING_COUNT * sizeof(uint16_t);
-    reg_area.access = MB_ACCESS_RW;
-    ret = mbc_slave_set_descriptor(mbc_slave_handle, reg_area);
-    if (ret != ESP_OK) {
-        ESP_LOGE(TAG, "Failed to set holding registers descriptor: %s", esp_err_to_name(ret));
-        return ret;
-    }
-    
-    // Set UART pins with RTS for RS485 direction control
-    ret = uart_set_pin(MB_PORT_NUM, MB_UART_TXD, MB_UART_RXD, 
-                      MB_UART_RTS, UART_PIN_NO_CHANGE);
-    if (ret != ESP_OK) {
-        ESP_LOGE(TAG, "Failed to set UART pins: %s", esp_err_to_name(ret));
-        return ret;
-    }
-    
-    // Set UART mode to RS485 Half Duplex
-    ret = uart_set_mode(MB_PORT_NUM, UART_MODE_RS485_HALF_DUPLEX);
-    if (ret != ESP_OK) {
-        ESP_LOGE(TAG, "Failed to set UART RS485 mode: %s", esp_err_to_name(ret));
-        return ret;
-    }
-    
-    ESP_LOGI(TAG, "UART1 configured: TX=GPIO%d, RX=GPIO%d, RTS=GPIO%d, Baud=%d", 
-             MB_UART_TXD, MB_UART_RXD, MB_UART_RTS, MB_DEV_SPEED);
-    ESP_LOGI(TAG, "RS485 Half-Duplex mode enabled");
     
     ESP_LOGI(TAG, "Modbus RTU slave initialized successfully");
-    ESP_LOGI(TAG, "Slave address: %d, Port: UART%d, Baud: %d", 
-             MB_SLAVE_ADDR, MB_PORT_NUM, MB_DEV_SPEED);
-    ESP_LOGI(TAG, "UART pins: TX=GPIO%d, RX=GPIO%d", MB_UART_TXD, MB_UART_RXD);
-    ESP_LOGI(TAG, "Input registers: 0x%04X-0x%04X (%d regs)", 
-             MB_REG_INPUT_START, MB_REG_INPUT_START + MB_REG_INPUT_COUNT - 1, MB_REG_INPUT_COUNT);
-    ESP_LOGI(TAG, "Holding registers: 0x%04X-0x%04X (%d regs)", 
-             MB_REG_HOLDING_START, MB_REG_HOLDING_START + MB_REG_HOLDING_COUNT - 1, MB_REG_HOLDING_COUNT);
-    
     return ESP_OK;
 }
 
@@ -201,12 +297,15 @@ esp_err_t modbus_slave_start(void) {
         ESP_LOGE(TAG, "Modbus slave start failed: %s", esp_err_to_name(ret));
         return ret;
     }
+    modbus_slave_running = true;
     
     // Create task to periodically update input registers and process events
     BaseType_t task_ret = xTaskCreate(modbus_task, "modbus_task", 4096, 
                                       NULL, 5, &mb_task_handle);
     if (task_ret != pdPASS) {
         ESP_LOGE(TAG, "Failed to create Modbus task");
+        (void)mbc_slave_stop(mbc_slave_handle);
+        modbus_slave_running = false;
         return ESP_ERR_NO_MEM;
     }
     
@@ -215,10 +314,73 @@ esp_err_t modbus_slave_start(void) {
     return ESP_OK;
 }
 
-/**
- * @brief Update input registers from heat pump decoded data
- * @return ESP_OK on success
- */
-esp_err_t modbus_update_input_registers(void) {
-    return modbus_params_update_inputs();
+esp_err_t modbus_slave_apply_serial_config(const modbus_serial_config_t *cfg) {
+    if (cfg == NULL) {
+        return ESP_ERR_INVALID_ARG;
+    }
+    if (!modbus_slave_validate_serial_config(cfg)) {
+        ESP_LOGE(TAG, "Invalid Modbus serial configuration requested");
+        return ESP_ERR_INVALID_ARG;
+    }
+
+    bool controller_exists = (mbc_slave_handle != NULL);
+    bool restart_required = modbus_slave_running;
+    modbus_serial_config_t previous_cfg = current_serial_cfg;
+
+    if (controller_exists) {
+        if (restart_required) {
+            esp_err_t stop_ret = mbc_slave_stop(mbc_slave_handle);
+            if (stop_ret != ESP_OK) {
+                ESP_LOGW(TAG, "Failed to stop Modbus controller before reconfig: %s",
+                         esp_err_to_name(stop_ret));
+            }
+            modbus_slave_running = false;
+        }
+        esp_err_t del_ret = mbc_slave_delete(mbc_slave_handle);
+        if (del_ret != ESP_OK) {
+            ESP_LOGE(TAG, "Failed to delete Modbus controller: %s", esp_err_to_name(del_ret));
+            return del_ret;
+        }
+        mbc_slave_handle = NULL;
+    }
+
+    current_serial_cfg = *cfg;
+
+    esp_err_t ret = modbus_slave_setup_controller();
+    if (ret != ESP_OK) {
+        ESP_LOGE(TAG, "Failed to setup controller with new config: %s", esp_err_to_name(ret));
+        current_serial_cfg = previous_cfg;
+        modbus_slave_restore_previous_controller(&previous_cfg, restart_required, controller_exists);
+        return ret;
+    }
+
+    if (restart_required) {
+        ret = mbc_slave_start(mbc_slave_handle);
+        if (ret != ESP_OK) {
+            ESP_LOGE(TAG, "Failed to restart Modbus controller: %s", esp_err_to_name(ret));
+            (void)mbc_slave_delete(mbc_slave_handle);
+            mbc_slave_handle = NULL;
+            modbus_slave_restore_previous_controller(&previous_cfg, true, controller_exists);
+            current_serial_cfg = previous_cfg;
+            return ret;
+        }
+        modbus_slave_running = true;
+    }
+
+    ESP_LOGI(TAG, "Applied Modbus config: baud=%lu, parity=%d, data_bits=%d, stop_bits=%d, slave_id=%u",
+             (unsigned long)current_serial_cfg.baudrate,
+             current_serial_cfg.parity,
+             current_serial_cfg.data_bits,
+             current_serial_cfg.stop_bits,
+             current_serial_cfg.slave_addr);
+
+    return ESP_OK;
+}
+
+esp_err_t modbus_slave_get_serial_config(modbus_serial_config_t *cfg_out) {
+    if (cfg_out == NULL) {
+        return ESP_ERR_INVALID_ARG;
+    }
+    *cfg_out = current_serial_cfg;
+    return ESP_OK;
 }

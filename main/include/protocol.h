@@ -2,7 +2,7 @@
  * @file protocol.h
  * @brief Heat pump protocol communication header
  * @version 0.1.0
- * @date 2025-10
+ * @date 2025-11
  */
 
 #ifndef PROTOCOL_H
@@ -29,8 +29,8 @@ extern "C" {
 #define PROTOCOL_FLOW_CTRL UART_HW_FLOWCTRL_DISABLE
 
 // GPIO pins
-#define PROTOCOL_TX_PIN 16
-#define PROTOCOL_RX_PIN 17
+#define PROTOCOL_TX_PIN 17
+#define PROTOCOL_RX_PIN 16
 
 // Timing constants
 #define PROTOCOL_READ_TIMEOUT_MS 2000

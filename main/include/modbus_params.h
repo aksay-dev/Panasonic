@@ -243,37 +243,20 @@ extern "C" {
 #define MB_INPUT_HEATER_STOP_DELTA     0x0132  // TOP98, int16 (*100)
 
 // ============================================================================
-// Error and model info (0x0140-0x014F)
+// Error info (0x0140-0x0141)
 // ============================================================================
-// Error state: 8 registers (16 bytes for char[16])
-#define MB_INPUT_ERROR_STATE_0         0x0140  // TOP44[0-1]
-#define MB_INPUT_ERROR_STATE_1         0x0141  // TOP44[2-3]
-#define MB_INPUT_ERROR_STATE_2         0x0142  // TOP44[4-5]
-#define MB_INPUT_ERROR_STATE_3         0x0143  // TOP44[6-7]
-#define MB_INPUT_ERROR_STATE_4         0x0144  // TOP44[8-9]
-#define MB_INPUT_ERROR_STATE_5         0x0145  // TOP44[10-11]
-#define MB_INPUT_ERROR_STATE_6         0x0146  // TOP44[12-13]
-#define MB_INPUT_ERROR_STATE_7         0x0147  // TOP44[14-15]
+// Error state
+#define MB_INPUT_ERROR_TYPE         0x0140
+#define MB_INPUT_ERROR_NUMBER       0x0141
 
 // ============================================================================
-// Heat pump model (0x0148-0x0157) - 16 registers (32 bytes for char[32])
+// Heat pump model (0x0150-0x0154) - 5 registers (10 bytes)
 // ============================================================================
-#define MB_INPUT_HP_MODEL_0            0x0148  // TOP92[0-1]
-#define MB_INPUT_HP_MODEL_1            0x0149  // TOP92[2-3]
-#define MB_INPUT_HP_MODEL_2            0x014A  // TOP92[4-5]
-#define MB_INPUT_HP_MODEL_3            0x014B  // TOP92[6-7]
-#define MB_INPUT_HP_MODEL_4            0x014C  // TOP92[8-9]
-#define MB_INPUT_HP_MODEL_5            0x014D  // TOP92[10-11]
-#define MB_INPUT_HP_MODEL_6            0x014E  // TOP92[12-13]
-#define MB_INPUT_HP_MODEL_7            0x014F  // TOP92[14-15]
-#define MB_INPUT_HP_MODEL_8            0x0150  // TOP92[16-17]
-#define MB_INPUT_HP_MODEL_9            0x0151  // TOP92[18-19]
-#define MB_INPUT_HP_MODEL_10           0x0152  // TOP92[20-21]
-#define MB_INPUT_HP_MODEL_11           0x0153  // TOP92[22-23]
-#define MB_INPUT_HP_MODEL_12           0x0154  // TOP92[24-25]
-#define MB_INPUT_HP_MODEL_13           0x0155  // TOP92[26-27]
-#define MB_INPUT_HP_MODEL_14           0x0156  // TOP92[28-29]
-#define MB_INPUT_HP_MODEL_15           0x0157  // TOP92[30-31]
+#define MB_INPUT_HP_MODEL_0            0x0150  // TOP92[0-1]
+#define MB_INPUT_HP_MODEL_1            0x0151  // TOP92[2-3]
+#define MB_INPUT_HP_MODEL_2            0x0152  // TOP92[4-5]
+#define MB_INPUT_HP_MODEL_3            0x0153  // TOP92[6-7]
+#define MB_INPUT_HP_MODEL_4            0x0154  // TOP92[8-9]
 
 // ============================================================================
 // Operation hours (0x0158-0x015F)
@@ -292,8 +275,63 @@ extern "C" {
 #define MB_INPUT_SOLAR_WATER_PUMP      0x0165  // OPT5, uint8
 #define MB_INPUT_ALARM_STATE           0x0166  // OPT6, uint8
 
+// Registers copy fo fast reading
+// Basic temperatures
+#define MB_INPUT_MAIN_INLET_TEMP_CPY            0x0170
+#define MB_INPUT_MAIN_OUTLET_TEMP_CPY           0x0171
+#define MB_INPUT_MAIN_TARGET_TEMP_CPY           0x0172
+#define MB_INPUT_DHW_TARGET_TEMP_CPY            0x0173
+#define MB_INPUT_OUTSIDE_TEMP_CPY               0x0174
+// Additional temperatures
+#define MB_INPUT_INSIDE_PIPE_TEMP_CPY           0x0175
+#define MB_INPUT_OUTSIDE_PIPE_TEMP_CPY          0x0176
+// Power and energy
+#define MB_INPUT_HEAT_POWER_CONSUMPTION_CPY     0x0177
+#define MB_INPUT_COOL_POWER_CONSUMPTION_CPY     0x0178
+#define MB_INPUT_DHW_POWER_CONSUMPTION_CPY      0x0179
+// ==================================================================
+// Technical parameters
+// ==================================================================
+#define MB_INPUT_COMPRESSOR_FREQ_CPY            0x017A
+#define MB_INPUT_PUMP_FLOW_CPY                  0x017B
+#define MB_INPUT_OPERATIONS_HOURS_CPY           0x017C
+#define MB_INPUT_OPERATIONS_COUNTER_CPY         0x017D
+#define MB_INPUT_PUMP_SPEED_CPY                 0x017E
+#define MB_INPUT_COMPRESSOR_CURRENT_CPY         0x017F
+#define MB_INPUT_PUMP_DUTY_CPY                  0x0180
+// ============================================================================
+// Operation states
+// ============================================================================
+#define MB_INPUT_HEATPUMP_STATE_CPY             0x0181
+#define MB_INPUT_FORCE_DHW_STATE_CPY            0x0182
+#define MB_INPUT_OPERATING_MODE_STATE_CPY       0x0183
+#define MB_INPUT_THREE_WAY_VALVE_STATE_CPY      0x0184
+#define MB_INPUT_DEFROSTING_STATE_CPY           0x0185
+// ==================================================================
+// Heating/Cooling mode settings
+// ==================================================================
+#define MB_INPUT_HEATING_MODE_CPY               0x0186
+#define MB_INPUT_COOLING_MODE_CPY               0x0187
+// ==================================================================
+// External controls
+// ==================================================================
+#define MB_INPUT_WATER_PRESSURE_CPY             0x0188
+#define MB_INPUT_EXTERNAL_CONTROL_CPY           0x0189
+#define MB_INPUT_EXTERNAL_ERROR_SIGNAL_CPY      0x018A
+// ==================================================================
+// Pump and valve states
+// ==================================================================
+#define MB_INPUT_TWO_WAY_VALVE_STATE_CPY        0x018B
+#define MB_INPUT_THREE_WAY_VALVE_STATE2_CPY     0x018C
+// ==================================================================
+// Error info
+// ==================================================================
+// Error state
+#define MB_INPUT_ERROR_TYPE_CPY         0x018D
+#define MB_INPUT_ERROR_NUMBER_CPY       0x018E
+
 // Total input registers
-#define MB_REG_INPUT_COUNT             0x0170  // 368 registers (0x0000-0x016F)
+#define MB_REG_INPUT_COUNT             0x0190  // 400 registers (0x0000-0x018F)
 
 // ============================================================================
 // HOLDING REGISTERS (Read/Write) - 0x1000-0x103F
@@ -372,8 +410,16 @@ extern "C" {
 #define MB_HOLDING_CURVES_REGS              16
 #define MB_HOLDING_CURVES_APPLY             0x1070  // write any value to apply
 
+// Modbus serial configuration (0x1080-0x1085)
+#define MB_HOLDING_SET_MODBUS_BAUD          0x1080  // uint16, baudrate (1200-57600)
+#define MB_HOLDING_SET_MODBUS_PARITY        0x1081  // 0=None, 1=Even, 2=Odd
+#define MB_HOLDING_SET_MODBUS_STOP_BITS     0x1082  // 1 or 2 stop bits
+#define MB_HOLDING_SET_MODBUS_DATA_BITS     0x1083  // 7 or 8 data bits
+#define MB_HOLDING_SET_MODBUS_SLAVE_ID      0x1084  // 1-247
+#define MB_HOLDING_APPLY_MODBUS_SETTINGS    0x1085  // write non-zero to apply
+
 // Update total count to cover up to last defined register
-#define MB_REG_HOLDING_COUNT            0x0080  // headroom to cover new ranges
+#define MB_REG_HOLDING_COUNT            0x0090  // headroom to cover new ranges
 
 // ============================================================================
 // Register data structures
@@ -393,37 +439,11 @@ extern int16_t mb_holding_registers[MB_REG_HOLDING_COUNT];
 esp_err_t modbus_params_init(void);
 
 /**
- * @brief Update input registers from decoded heat pump data
- * @return ESP_OK on success
- */
-esp_err_t modbus_params_update_inputs(void);
-
-/**
  * @brief Process holding register writes (execute commands)
  * @param reg_addr Register address that was written
  * @return ESP_OK on success
  */
 esp_err_t modbus_params_process_holding_write(uint16_t reg_addr);
-
-/**
- * @brief Helper function to copy string to Modbus registers (2 bytes per register)
- * @param dest_reg Start register index
- * @param src Source string
- * @param max_len Maximum string length
- */
-void copy_string_to_registers(uint16_t dest_reg, const char *src, size_t max_len);
-
-/**
- * @brief Lock registers mutex (call before accessing registers)
- * @param timeout Time to wait for mutex (use portMAX_DELAY for infinite wait)
- * @return true if lock acquired, false on timeout
- */
-bool mb_registers_lock(TickType_t timeout);
-
-/**
- * @brief Unlock registers mutex (call after accessing registers)
- */
-void mb_registers_unlock(void);
 
 #ifdef __cplusplus
 }

@@ -13,13 +13,21 @@
 #include "esp_err.h"
 #include "driver/uart.h"
 
-// Modbus communication parameters
+// Modbus communication parameters (defaults)
 #define MB_PORT_NUM         UART_NUM_1    // UART1
-#define MB_DEV_SPEED        (9600)        // Baud rate
-#define MB_SLAVE_ADDR       (7)           // Slave address
+#define MB_DEV_SPEED        (9600)        // Default baud rate
+#define MB_SLAVE_ADDR       (7)           // Default slave address
 #define MB_UART_TXD         (25)          // TX pin
 #define MB_UART_RXD         (26)          // RX pin
 #define MB_UART_RTS         (23)          // RTS pin for RS485 direction control
+
+typedef struct {
+    uint32_t baudrate;
+    uart_parity_t parity;
+    uart_stop_bits_t stop_bits;
+    uart_word_length_t data_bits;
+    uint8_t slave_addr;
+} modbus_serial_config_t;
 
 #ifdef __cplusplus
 extern "C" {
@@ -43,6 +51,20 @@ esp_err_t modbus_slave_start(void);
  * @return ESP_OK on success
  */
 esp_err_t modbus_update_input_registers(void);
+
+/**
+ * @brief Apply a new Modbus serial configuration (baud rate, frame, slave ID)
+ * @param cfg Pointer to configuration structure
+ * @return ESP_OK on success
+ */
+esp_err_t modbus_slave_apply_serial_config(const modbus_serial_config_t *cfg);
+
+/**
+ * @brief Get current Modbus serial configuration
+ * @param cfg_out Output pointer
+ * @return ESP_OK on success
+ */
+esp_err_t modbus_slave_get_serial_config(modbus_serial_config_t *cfg_out);
 
 #ifdef __cplusplus
 }

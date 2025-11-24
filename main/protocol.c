@@ -2,7 +2,7 @@
  * @file protocol.c
  * @brief Heat pump protocol communication implementation
  * @version 0.1.0
- * @date 2025
+ * @date 2025-11
  */
 
 #include "protocol.h"
@@ -22,7 +22,7 @@ protocol_rx_t g_protocol_rx = {0};
 // Global protocol context
 protocol_context_t g_protocol_ctx = {0};
 
-// Protocol command templates (based on HeishaMon analysis)
+// Protocol command templates
 static const uint8_t initial_query[] = {0x31, 0x05, 0x10, 0x01, 0x00, 0x00, 0x00};
 
 const uint8_t panasonic_query[] = {
@@ -113,7 +113,6 @@ static int protocol_uart_receive(uint8_t *data, size_t max_size) {
     return uart_read_bytes(PROTOCOL_UART_NUM, data, max_size, pdMS_TO_TICKS(PROTOCOL_READ_TIMEOUT_MS));
 }
 
-
 // Вспомогательная функция минидампа массива uint8_t длиной 256 байт (16 строк по 16 байт)
 static void mini_dump(const uint8_t *data) {
     for (int row = 0; row < 16; row++) {
@@ -141,7 +140,7 @@ static void mini_dump(const uint8_t *data) {
  */
 static esp_err_t protocol_process_received_data(const uint8_t *data, size_t size) {
 
-    mini_dump(data);
+    // mini_dump(data);
     // Validate data size
     if (size < 3) {
         ESP_LOGW(TAG, "Received data too short: %d bytes", size);

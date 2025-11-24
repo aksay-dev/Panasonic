@@ -29,7 +29,6 @@ esp_err_t hpc_init(void);
  */
 esp_err_t hpc_start(void);
 
-
 #ifdef __cplusplus
 }
 #endif

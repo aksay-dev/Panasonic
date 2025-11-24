@@ -1,0 +1,111 @@
+
+// Basic temperatures (0x0010-0x002F)
+
+// int16_t types (stored as * 100)
+MB_INPUT_MAIN_INLET_TEMP       0x0010  // TOP5, int16
+MB_INPUT_MAIN_OUTLET_TEMP      0x0011  // TOP6, int16
+
+// int8_t types (stored as whole degrees)
+MB_INPUT_MAIN_TARGET_TEMP      0x0012  // TOP7, int8
+MB_INPUT_DHW_TARGET_TEMP       0x0014  // TOP9, int8
+MB_INPUT_OUTSIDE_TEMP          0x0015  // TOP14, int8
+
+// Additional temperatures (0x0020-0x003F)
+MB_INPUT_INSIDE_PIPE_TEMP      0x0022  // TOP51, int8
+MB_INPUT_OUTSIDE_PIPE_TEMP     0x0027  // TOP21, int8 (outdoor coil)
+
+Power and energy (0x0070-0x007F)
+
+MB_INPUT_HEAT_POWER_CONSUMPTION  0x0071  // TOP16, uint16
+MB_INPUT_COOL_POWER_CONSUMPTION  0x0073  // TOP39, uint16
+MB_INPUT_DHW_POWER_CONSUMPTION   0x0075  // TOP41, uint16
+
+==================================================================
+// Technical parameters (0x0080-0x009F)
+==================================================================
+MB_INPUT_COMPRESSOR_FREQ       0x0080  // TOP8, uint16
+MB_INPUT_PUMP_FLOW             0x0081  // TOP1, int16 (*100)
+MB_INPUT_OPERATIONS_HOURS      0x0082  // TOP11, uint16
+MB_INPUT_OPERATIONS_COUNTER    0x0083  // TOP12, uint16
+MB_INPUT_PUMP_SPEED            0x0087  // TOP65, uint16
+MB_INPUT_COMPRESSOR_CURRENT    0x0089  // TOP67, int16 (*100)
+MB_INPUT_PUMP_DUTY             0x008A  // TOP93, uint8
+
+// Operation states (0x00A0-0x00AF)
+// ============================================================================
+MB_INPUT_HEATPUMP_STATE        0x00A0  // TOP0, uint8
+MB_INPUT_FORCE_DHW_STATE       0x00A1  // TOP2, uint8
+MB_INPUT_OPERATING_MODE_STATE  0x00A2  // TOP4, uint8
+MB_INPUT_THREE_WAY_VALVE_STATE 0x00A7  // TOP20, uint8
+MB_INPUT_DEFROSTING_STATE      0x00A8  // TOP26, uint8
+
+==================================================================
+// Heating/Cooling mode settings (0x00D0-0x00DF)
+==================================================================
+MB_INPUT_HEATING_MODE          0x00D0  // TOP76, uint8
+MB_INPUT_COOLING_MODE          0x00D5  // TOP81, uint8
+
+============================================================================
+==================================================================
+// External controls (0x0100-0x010F)
+==================================================================
+MB_INPUT_WATER_PRESSURE        0x0101  // TOP115, int16 (*100)
+MB_INPUT_EXTERNAL_CONTROL      0x0102  // TOP119, uint8
+MB_INPUT_EXTERNAL_ERROR_SIGNAL 0x0104  // TOP121, uint8
+
+==================================================================
+// Pump and valve states (0x0110-0x011F)
+==================================================================
+MB_INPUT_TWO_WAY_VALVE_STATE   0x0112  // TOP125, uint8
+MB_INPUT_THREE_WAY_VALVE_STATE2 0x0113 // TOP126, uint8
+
+
+==================================================================
+// Error and model info (0x0140-0x014F)
+==================================================================
+// Error state: 8 registers (16 bytes for char[16])
+MB_INPUT_ERROR_STATE_0         0x0140  // TOP44[0-1]
+MB_INPUT_ERROR_STATE_1         0x0141  // TOP44[2-3]
+MB_INPUT_ERROR_STATE_2         0x0142  // TOP44[4-5]
+MB_INPUT_ERROR_STATE_3         0x0143  // TOP44[6-7]
+MB_INPUT_ERROR_STATE_4         0x0144  // TOP44[8-9]
+MB_INPUT_ERROR_STATE_5         0x0145  // TOP44[10-11]
+MB_INPUT_ERROR_STATE_6         0x0146  // TOP44[12-13]
+MB_INPUT_ERROR_STATE_7         0x0147  // TOP44[14-15]
+
+
+
+
+// Total input registers
+MB_REG_INPUT_COUNT             0x0170  // 368 registers (0x0000-0x016F)
+
+// ============================================================================
+// HOLDING REGISTERS (Read/Write) - 0x1000-0x103F
+// ============================================================================
+
+MB_REG_HOLDING_START            0x1000
+
+// Control commands (0x1000-0x100F)
+MB_HOLDING_SET_HEATPUMP         0x1000
+MB_HOLDING_SET_PUMP             0x1001
+MB_HOLDING_SET_POWERFUL_MODE    0x1004
+MB_HOLDING_SET_OPERATION_MODE   0x1005
+MB_HOLDING_SET_FORCE_DHW        0x1007
+MB_HOLDING_SET_FORCE_STERILIZATION 0x1009
+
+
+
+// Temperature setpoints (0x1020-0x1024) - all in °C (int8)
+MB_HOLDING_SET_Z1_HEAT_TEMP     0x1020
+MB_HOLDING_SET_Z1_COOL_TEMP     0x1021
+MB_HOLDING_SET_DHW_TEMP         0x1024
+
+
+
+// Optional temperatures (float in commands, we pass int16 raw °C) 0x1040-0x1046
+MB_HOLDING_SET_Z1_WATER_TEMP        0x1043
+
+// Optional controls (0x1050-0x1055)
+MB_HOLDING_SET_HEAT_COOL_MODE       0x1050
+
+

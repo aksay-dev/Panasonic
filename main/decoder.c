@@ -15,6 +15,7 @@
 #include "stdio.h"
 #include "stdlib.h"
 #include <stdint.h>
+#include <stdio.h>
 
 
 static const char *TAG = "DECODER";
@@ -158,6 +159,7 @@ static const char *TAG = "DECODER";
 #define OFFS_BIVALENT_ADV_START_DELAY       67
 #define OFFS_BIVALENT_ADV_STOP_DELAY        69
 #define OFFS_BIVALENT_ADV_DHW_DELAY         70
+#define OFFS_HP_MODEL_0                     129
 
 // Extended data offsets (XTOP topics)
 #define OFFS_XTOP_HEAT_POWER_CONSUMPTION_EXTRA    14
@@ -182,8 +184,8 @@ static const char *TAG = "DECODER";
 #define OFFS_OPT_PCB_DATA                         4
 
 // Direct numeric decode functions
-static int8_t getIntMinus128(uint8_t input) {
-    return input - 128;
+static int16_t getIntMinus128(uint8_t input) {
+    return (int16_t)input - 128;
 }
 
 static int16_t getIntMinus1(uint8_t input) {
@@ -191,67 +193,69 @@ static int16_t getIntMinus1(uint8_t input) {
 }
 
 static int16_t getIntMinus1Div5(uint8_t input) {
-    return (((int16_t)input - 1) * 100 / 5); // Return as int16_t * 100
+    // return (((int16_t)input - 1) * 100 / 5); // Return as int16_t * 100
+    return ((int16_t)input - 1) * 20;
 }
 
 static int16_t getIntMinus1Times10(uint8_t input) {
-    return (int16_t)((input - 1) * 10);
+    return ((int16_t)input - 1) * 10;
 }
 
 static int16_t getIntMinus1Times50(uint8_t input) {
-    return (int16_t)((input - 1) * 50);
+    return ((int16_t)input - 1) * 50;
 }
 
-static uint8_t getBit7and8(uint8_t input) {
-    return (input & 0b11) - 1;
+static int16_t getBit7and8(uint8_t input) {
+    return (int16_t)(input & 0b11) - 1;
 }
 
-static uint8_t getBit1and2(uint8_t input) {
-    return (input >> 6) - 1;
+static int16_t getBit1and2(uint8_t input) {
+    return (int16_t)(input >> 6) - 1;
 }
 
-static uint8_t getBit3and4and5(uint8_t input) {
-    return ((input >> 3) & 0b111) - 1;
+static int16_t getBit3and4and5(uint8_t input) {
+    return (int16_t)((input >> 3) & 0b111) - 1;
 }
 
-static uint8_t getBit3and4(uint8_t input) {
-    return ((input >> 4) & 0b11) - 1;
+static int16_t getBit3and4(uint8_t input) {
+    return (int16_t)((input >> 4) & 0b11) - 1;
 }
 
-static uint8_t getBit5and6(uint8_t input) {
-    return ((input >> 2) & 0b11) - 1;
+static int16_t getBit5and6(uint8_t input) {
+    return (int16_t)((input >> 2) & 0b11) - 1;
 }
 
-static uint8_t getRight3bits(uint8_t input) {
-    return (input & 0b111) - 1;
+static int16_t getRight3bits(uint8_t input) {
+    return (int16_t)(input & 0b111) - 1;
 }
 
 static int16_t getValvePID(uint8_t input) {
-    return (((int16_t)input - 1) * 100 / 2 ); // Return as int16_t * 100
+    // return (((int16_t)input - 1) * 100 / 2 ); // Return as int16_t * 100
+    return ((int16_t)input - 1) * 50;
 }
 
 static int16_t getIntMinus1Div50(uint8_t input) {
-    return (((int16_t)input - 1) * 2); // Return as int16_t * 100
+    return ((int16_t)input - 1) * 2; // Return as int16_t * 100
 }
 
-static uint8_t getFirstByte(uint8_t input) {
-    return (input >> 4) - 1;
+static int16_t getFirstByte(uint8_t input) {
+    return (int16_t)(input >> 4) - 1;
 }
 
-static uint8_t getSecondByte(uint8_t input) {
-    return (input & 0b1111) - 1;
+static int16_t getSecondByte(uint8_t input) {
+    return (int16_t)(input & 0b1111) - 1;
 }
 
-static uint8_t getBit1(uint8_t input) {
-    return (input >> 7);
+static int16_t getBit1(uint8_t input) {
+    return (int16_t)(input >> 7);
 }
 
-static uint16_t getPower(uint8_t input) {
-    return (uint16_t)((input - 1) * 200);
+static int16_t getPower(uint8_t input) {
+    return ((int16_t)input - 1) * 200;
 }
 
-static uint16_t getUint16(uint8_t addr) {
-    return ((g_protocol_rx.data[addr + 1] << 8) | g_protocol_rx.data[addr]) - 1;
+static int16_t getUint16(uint8_t addr) {
+    return (int16_t)((g_protocol_rx.data[addr + 1] << 8) | g_protocol_rx.data[addr]) - 1;
 }
 
 // static uint16_t getPumpFlow() {
@@ -262,12 +266,12 @@ static uint16_t getUint16(uint8_t addr) {
 //     return (uint16_t)(PumpFlow * 100); // Return as l/min * 100
 // }
 
-static uint16_t getPumpFlow() {
+static int16_t getPumpFlow() {
     // return (uint16_t)g_protocol_rx.data[170] * 100 + ((uint16_t)g_protocol_rx.data[169] - 1) * 100 / 256; // Return as l/min * 100
-    return (uint16_t)g_protocol_rx.data[OFFS_PUMP_FLOW] * 100 + ((uint16_t)g_protocol_rx.data[OFFS_PUMP_FLOW_FRACTIONAL] - 1) * 100 / 256; // Return as l/min * 100
+    return (int16_t)g_protocol_rx.data[OFFS_PUMP_FLOW] * 100 + ((int16_t)g_protocol_rx.data[OFFS_PUMP_FLOW_FRACTIONAL] - 1) * 100 / 256; // Return as l/min * 100
 }
 
-static uint8_t getOpMode(uint8_t input) {
+static int16_t getOpMode(uint8_t input) {
     switch ((int)(input & 0b111111)) {
         case 18: return 0;
         case 19: return 1;
@@ -278,7 +282,8 @@ static uint8_t getOpMode(uint8_t input) {
         case 41: return 6;
         case 26: return 7;
         case 42: return 8;
-        default: return 255; // -1 as uint8_t
+        // default: return 255; // -1 as uint8_t
+        default: return -1; // -1 as int16_t
     }
 }
 
@@ -289,12 +294,6 @@ static uint8_t getOpMode(uint8_t input) {
 esp_err_t decode_main_data(void) {
     ESP_LOGD(TAG, "Decoding main data");
     
-    // Lock mutex before accessing registers (shared resource with Modbus task)
-    if (!mb_registers_lock(portMAX_DELAY)) {
-        ESP_LOGE(TAG, "Failed to lock registers mutex");
-        return ESP_ERR_INVALID_STATE;
-    }
-    
     // Optimized direct decoding - write directly to Modbus registers
     
     // Temperatures (stored as int16_t * 100, e.g. 25.5°C = 2550)
@@ -304,223 +303,243 @@ esp_err_t decode_main_data(void) {
     if (fractional > 1 && fractional < 5) {
         main_inlet_temp += (fractional - 1) * 25;
     }
-    mb_input_registers[MB_INPUT_MAIN_INLET_TEMP] = main_inlet_temp;
+    mb_input_registers[MB_INPUT_MAIN_INLET_TEMP_CPY] = mb_input_registers[MB_INPUT_MAIN_INLET_TEMP] = main_inlet_temp;
     
     int16_t main_outlet_temp = getIntMinus128(g_protocol_rx.data[OFFS_MAIN_OUTLET_TEMP]) * 100;
     fractional = (int)((g_protocol_rx.data[OFFS_MAIN_OUTLET_FRACTIONAL_TEMP] >> 3) & 0b111);
     if (fractional > 1 && fractional < 5) {
         main_outlet_temp += (fractional - 1) * 25;
     }
-    mb_input_registers[MB_INPUT_MAIN_OUTLET_TEMP] = main_outlet_temp;
+    mb_input_registers[MB_INPUT_MAIN_OUTLET_TEMP_CPY] = mb_input_registers[MB_INPUT_MAIN_OUTLET_TEMP] = main_outlet_temp;
     
-    mb_input_registers[MB_INPUT_MAIN_TARGET_TEMP] = (int16_t)getIntMinus128(g_protocol_rx.data[OFFS_MAIN_TARGET_TEMP]);
-    mb_input_registers[MB_INPUT_DHW_TEMP] = (int16_t)getIntMinus128(g_protocol_rx.data[OFFS_DHW_TEMP]);
-    mb_input_registers[MB_INPUT_DHW_TARGET_TEMP] = (int16_t)getIntMinus128(g_protocol_rx.data[OFFS_DHW_TARGET_TEMP]);
-    mb_input_registers[MB_INPUT_OUTSIDE_TEMP] = (int16_t)getIntMinus128(g_protocol_rx.data[OFFS_OUTSIDE_TEMP]);
-    mb_input_registers[MB_INPUT_ROOM_THERMOSTAT_TEMP] = (int16_t)getIntMinus128(g_protocol_rx.data[OFFS_ROOM_THERMOSTAT_TEMP]);
-    mb_input_registers[MB_INPUT_BUFFER_TEMP] = (int16_t)getIntMinus128(g_protocol_rx.data[OFFS_BUFFER_TEMP]);
-    mb_input_registers[MB_INPUT_SOLAR_TEMP] = (int16_t)getIntMinus128(g_protocol_rx.data[OFFS_SOLAR_TEMP]);
-    mb_input_registers[MB_INPUT_POOL_TEMP] = (int16_t)getIntMinus128(g_protocol_rx.data[OFFS_POOL_TEMP]);
+    mb_input_registers[MB_INPUT_MAIN_TARGET_TEMP_CPY] = mb_input_registers[MB_INPUT_MAIN_TARGET_TEMP] = 
+        getIntMinus128(g_protocol_rx.data[OFFS_MAIN_TARGET_TEMP]);
+    mb_input_registers[MB_INPUT_DHW_TEMP] = getIntMinus128(g_protocol_rx.data[OFFS_DHW_TEMP]);
+    mb_input_registers[MB_INPUT_DHW_TARGET_TEMP_CPY] = mb_input_registers[MB_INPUT_DHW_TARGET_TEMP] = 
+        getIntMinus128(g_protocol_rx.data[OFFS_DHW_TARGET_TEMP]);
+    mb_input_registers[MB_INPUT_OUTSIDE_TEMP_CPY] = mb_input_registers[MB_INPUT_OUTSIDE_TEMP] = 
+        getIntMinus128(g_protocol_rx.data[OFFS_OUTSIDE_TEMP]);
+    mb_input_registers[MB_INPUT_ROOM_THERMOSTAT_TEMP] = getIntMinus128(g_protocol_rx.data[OFFS_ROOM_THERMOSTAT_TEMP]);
+    mb_input_registers[MB_INPUT_BUFFER_TEMP] = getIntMinus128(g_protocol_rx.data[OFFS_BUFFER_TEMP]);
+    mb_input_registers[MB_INPUT_SOLAR_TEMP] = getIntMinus128(g_protocol_rx.data[OFFS_SOLAR_TEMP]);
+    mb_input_registers[MB_INPUT_POOL_TEMP] = getIntMinus128(g_protocol_rx.data[OFFS_POOL_TEMP]);
     
     // Power values
-    mb_input_registers[MB_INPUT_HEAT_POWER_PRODUCTION] = (int16_t)getPower(g_protocol_rx.data[OFFS_HEAT_POWER_PRODUCTION]);
-    mb_input_registers[MB_INPUT_HEAT_POWER_CONSUMPTION] = (int16_t)getPower(g_protocol_rx.data[OFFS_HEAT_POWER_CONSUMPTION]);
-    mb_input_registers[MB_INPUT_COOL_POWER_PRODUCTION] = (int16_t)getPower(g_protocol_rx.data[OFFS_COOL_POWER_PRODUCTION]);
-    mb_input_registers[MB_INPUT_COOL_POWER_CONSUMPTION] = (int16_t)getPower(g_protocol_rx.data[OFFS_COOL_POWER_CONSUMPTION]);
-    mb_input_registers[MB_INPUT_DHW_POWER_PRODUCTION] = (int16_t)getPower(g_protocol_rx.data[OFFS_DHW_POWER_PRODUCTION]);
-    mb_input_registers[MB_INPUT_DHW_POWER_CONSUMPTION] = (int16_t)getPower(g_protocol_rx.data[OFFS_DHW_POWER_CONSUMPTION]);
+    mb_input_registers[MB_INPUT_HEAT_POWER_PRODUCTION] = getPower(g_protocol_rx.data[OFFS_HEAT_POWER_PRODUCTION]);
+    mb_input_registers[MB_INPUT_HEAT_POWER_CONSUMPTION_CPY] = mb_input_registers[MB_INPUT_HEAT_POWER_CONSUMPTION] = 
+        getPower(g_protocol_rx.data[OFFS_HEAT_POWER_CONSUMPTION]);
+    mb_input_registers[MB_INPUT_COOL_POWER_PRODUCTION] = getPower(g_protocol_rx.data[OFFS_COOL_POWER_PRODUCTION]);
+    mb_input_registers[MB_INPUT_COOL_POWER_CONSUMPTION_CPY] = mb_input_registers[MB_INPUT_COOL_POWER_CONSUMPTION] = 
+        getPower(g_protocol_rx.data[OFFS_COOL_POWER_CONSUMPTION]);
+    mb_input_registers[MB_INPUT_DHW_POWER_PRODUCTION] = getPower(g_protocol_rx.data[OFFS_DHW_POWER_PRODUCTION]);
+    mb_input_registers[MB_INPUT_DHW_POWER_CONSUMPTION_CPY] = mb_input_registers[MB_INPUT_DHW_POWER_CONSUMPTION] = 
+        getPower(g_protocol_rx.data[OFFS_DHW_POWER_CONSUMPTION]);
     
     // Operation states
-    mb_input_registers[MB_INPUT_STATUS] = (int16_t)getBit7and8(g_protocol_rx.data[OFFS_HEATPUMP_STATE]);
-    mb_input_registers[MB_INPUT_HEATPUMP_STATE] = (int16_t)getBit7and8(g_protocol_rx.data[OFFS_HEATPUMP_STATE]);
-    mb_input_registers[MB_INPUT_FORCE_DHW_STATE] = (int16_t)getBit1and2(g_protocol_rx.data[OFFS_FORCE_DHW_STATE]);
-    mb_input_registers[MB_INPUT_OPERATING_MODE_STATE] = (int16_t)getOpMode(g_protocol_rx.data[OFFS_OPERATING_MODE_STATE]);
-    mb_input_registers[MB_INPUT_QUIET_MODE_SCHEDULE] = (int16_t)getBit1and2(g_protocol_rx.data[OFFS_QUIET_MODE_SCHEDULE]);
-    mb_input_registers[MB_INPUT_POWERFUL_MODE_TIME] = (int16_t)getRight3bits(g_protocol_rx.data[OFFS_POWERFUL_MODE_TIME]);
-    mb_input_registers[MB_INPUT_QUIET_MODE_LEVEL] = (int16_t)getBit3and4and5(g_protocol_rx.data[OFFS_QUIET_MODE_LEVEL]);
-    mb_input_registers[MB_INPUT_HOLIDAY_MODE_STATE] = (int16_t)getBit3and4(g_protocol_rx.data[OFFS_HOLIDAY_MODE_STATE]);
-    mb_input_registers[MB_INPUT_THREE_WAY_VALVE_STATE] = (int16_t)getBit7and8(g_protocol_rx.data[OFFS_THREE_WAY_VALVE_STATE]);
-    mb_input_registers[MB_INPUT_DEFROSTING_STATE] = (int16_t)getBit5and6(g_protocol_rx.data[OFFS_DEFROSTING_STATE]);
-    mb_input_registers[MB_INPUT_ZONES_STATE] = (int16_t)getBit1and2(g_protocol_rx.data[OFFS_ZONES_STATE]);
+    mb_input_registers[MB_INPUT_STATUS] = getBit7and8(g_protocol_rx.data[OFFS_HEATPUMP_STATE]);
+    mb_input_registers[MB_INPUT_HEATPUMP_STATE_CPY] = mb_input_registers[MB_INPUT_HEATPUMP_STATE] = 
+        getBit7and8(g_protocol_rx.data[OFFS_HEATPUMP_STATE]);
+    mb_input_registers[MB_INPUT_FORCE_DHW_STATE_CPY] = mb_input_registers[MB_INPUT_FORCE_DHW_STATE] = 
+        getBit1and2(g_protocol_rx.data[OFFS_FORCE_DHW_STATE]);
+    mb_input_registers[MB_INPUT_OPERATING_MODE_STATE_CPY] = mb_input_registers[MB_INPUT_OPERATING_MODE_STATE] = 
+        getOpMode(g_protocol_rx.data[OFFS_OPERATING_MODE_STATE]);
+    mb_input_registers[MB_INPUT_QUIET_MODE_SCHEDULE] = getBit1and2(g_protocol_rx.data[OFFS_QUIET_MODE_SCHEDULE]);
+    mb_input_registers[MB_INPUT_POWERFUL_MODE_TIME] = getRight3bits(g_protocol_rx.data[OFFS_POWERFUL_MODE_TIME]);
+    mb_input_registers[MB_INPUT_QUIET_MODE_LEVEL] = getBit3and4and5(g_protocol_rx.data[OFFS_QUIET_MODE_LEVEL]);
+    mb_input_registers[MB_INPUT_HOLIDAY_MODE_STATE] = getBit3and4(g_protocol_rx.data[OFFS_HOLIDAY_MODE_STATE]);
+    mb_input_registers[MB_INPUT_THREE_WAY_VALVE_STATE_CPY] = mb_input_registers[MB_INPUT_THREE_WAY_VALVE_STATE] = 
+        getBit7and8(g_protocol_rx.data[OFFS_THREE_WAY_VALVE_STATE]);
+    mb_input_registers[MB_INPUT_DEFROSTING_STATE_CPY] = mb_input_registers[MB_INPUT_DEFROSTING_STATE] = 
+        getBit5and6(g_protocol_rx.data[OFFS_DEFROSTING_STATE]);
+    mb_input_registers[MB_INPUT_ZONES_STATE] = getBit1and2(g_protocol_rx.data[OFFS_ZONES_STATE]);
     
     // Technical parameters
-    mb_input_registers[MB_INPUT_COMPRESSOR_FREQ] = (int16_t)getIntMinus1(g_protocol_rx.data[OFFS_COMPRESSOR_FREQ]);
-    mb_input_registers[MB_INPUT_PUMP_FLOW] = getPumpFlow(); // Special case - needs full function
-    mb_input_registers[MB_INPUT_OPERATIONS_HOURS] = (int16_t)getUint16(OFFS_OPERATIONS_HOURS);
-    mb_input_registers[MB_INPUT_OPERATIONS_COUNTER] = (int16_t)getUint16(OFFS_OPERATIONS_COUNTER);
+    mb_input_registers[MB_INPUT_COMPRESSOR_FREQ_CPY] = mb_input_registers[MB_INPUT_COMPRESSOR_FREQ] = 
+        getIntMinus1(g_protocol_rx.data[OFFS_COMPRESSOR_FREQ]);
+    mb_input_registers[MB_INPUT_PUMP_FLOW_CPY] = mb_input_registers[MB_INPUT_PUMP_FLOW] = 
+        getPumpFlow(); // Special case - needs full function
+    mb_input_registers[MB_INPUT_OPERATIONS_HOURS_CPY] = mb_input_registers[MB_INPUT_OPERATIONS_HOURS] = 
+        getUint16(OFFS_OPERATIONS_HOURS);
+    mb_input_registers[MB_INPUT_OPERATIONS_COUNTER_CPY] = mb_input_registers[MB_INPUT_OPERATIONS_COUNTER] = 
+        getUint16(OFFS_OPERATIONS_COUNTER);
     
     // Additional temperatures (stored as int8_t, write as int16_t)
-    mb_input_registers[MB_INPUT_MAIN_HEX_OUTLET_TEMP] = (int16_t)getIntMinus128(g_protocol_rx.data[OFFS_MAIN_HEX_OUTLET_TEMP]);
-    mb_input_registers[MB_INPUT_DISCHARGE_TEMP] = (int16_t)getIntMinus128(g_protocol_rx.data[OFFS_DISCHARGE_TEMP]);
-    mb_input_registers[MB_INPUT_INSIDE_PIPE_TEMP] = (int16_t)getIntMinus128(g_protocol_rx.data[OFFS_INSIDE_PIPE_TEMP]);
-    mb_input_registers[MB_INPUT_DEFROST_TEMP] = (int16_t)getIntMinus128(g_protocol_rx.data[OFFS_DEFROST_TEMP]);
-    mb_input_registers[MB_INPUT_EVA_OUTLET_TEMP] = (int16_t)getIntMinus128(g_protocol_rx.data[OFFS_EVA_OUTLET_TEMP]);
-    mb_input_registers[MB_INPUT_BYPASS_OUTLET_TEMP] = (int16_t)getIntMinus128(g_protocol_rx.data[OFFS_BYPASS_OUTLET_TEMP]);
-    mb_input_registers[MB_INPUT_IPM_TEMP] = (int16_t)getIntMinus128(g_protocol_rx.data[OFFS_IPM_TEMP]);
-    mb_input_registers[MB_INPUT_OUTSIDE_PIPE_TEMP] = (int16_t)getIntMinus128(g_protocol_rx.data[OFFS_OUTSIDE_PIPE_TEMP]);
-    mb_input_registers[MB_INPUT_Z1_ROOM_TEMP] = (int16_t)getIntMinus128(g_protocol_rx.data[OFFS_Z1_TEMP]);
-    mb_input_registers[MB_INPUT_Z2_ROOM_TEMP] = (int16_t)getIntMinus128(g_protocol_rx.data[OFFS_Z2_TEMP]);
-    mb_input_registers[MB_INPUT_Z1_WATER_TEMP] = (int16_t)getIntMinus128(g_protocol_rx.data[OFFS_Z1_WATER_TEMP]);
-    mb_input_registers[MB_INPUT_Z2_WATER_TEMP] = (int16_t)getIntMinus128(g_protocol_rx.data[OFFS_Z2_WATER_TEMP]);
-    mb_input_registers[MB_INPUT_Z1_WATER_TARGET_TEMP] = (int16_t)getIntMinus128(g_protocol_rx.data[OFFS_Z1_WATER_TARGET_TEMP]);
-    mb_input_registers[MB_INPUT_Z2_WATER_TARGET_TEMP] = (int16_t)getIntMinus128(g_protocol_rx.data[OFFS_Z2_WATER_TARGET_TEMP]);
-    mb_input_registers[MB_INPUT_SECOND_INLET_TEMP] = (int16_t)getIntMinus128(g_protocol_rx.data[OFFS_SECOND_INLET_TEMP]);
-    mb_input_registers[MB_INPUT_ECONOMIZER_OUTLET_TEMP] = (int16_t)getIntMinus128(g_protocol_rx.data[OFFS_ECONOMIZER_OUTLET_TEMP]);
-    mb_input_registers[MB_INPUT_SECOND_ROOM_THERMO_TEMP] = (int16_t)getIntMinus128(g_protocol_rx.data[OFFS_SECOND_ROOM_THERMOSTAT_TEMP]);
+    mb_input_registers[MB_INPUT_MAIN_HEX_OUTLET_TEMP] = getIntMinus128(g_protocol_rx.data[OFFS_MAIN_HEX_OUTLET_TEMP]);
+    mb_input_registers[MB_INPUT_DISCHARGE_TEMP] = getIntMinus128(g_protocol_rx.data[OFFS_DISCHARGE_TEMP]);
+    mb_input_registers[MB_INPUT_INSIDE_PIPE_TEMP_CPY] = mb_input_registers[MB_INPUT_INSIDE_PIPE_TEMP] = 
+        getIntMinus128(g_protocol_rx.data[OFFS_INSIDE_PIPE_TEMP]);
+    mb_input_registers[MB_INPUT_DEFROST_TEMP] = getIntMinus128(g_protocol_rx.data[OFFS_DEFROST_TEMP]);
+    mb_input_registers[MB_INPUT_EVA_OUTLET_TEMP] = getIntMinus128(g_protocol_rx.data[OFFS_EVA_OUTLET_TEMP]);
+    mb_input_registers[MB_INPUT_BYPASS_OUTLET_TEMP] = getIntMinus128(g_protocol_rx.data[OFFS_BYPASS_OUTLET_TEMP]);
+    mb_input_registers[MB_INPUT_IPM_TEMP] = getIntMinus128(g_protocol_rx.data[OFFS_IPM_TEMP]);
+    mb_input_registers[MB_INPUT_OUTSIDE_PIPE_TEMP_CPY] = mb_input_registers[MB_INPUT_OUTSIDE_PIPE_TEMP] = 
+        getIntMinus128(g_protocol_rx.data[OFFS_OUTSIDE_PIPE_TEMP]);
+    mb_input_registers[MB_INPUT_Z1_ROOM_TEMP] = getIntMinus128(g_protocol_rx.data[OFFS_Z1_TEMP]);
+    mb_input_registers[MB_INPUT_Z2_ROOM_TEMP] = getIntMinus128(g_protocol_rx.data[OFFS_Z2_TEMP]);
+    mb_input_registers[MB_INPUT_Z1_WATER_TEMP] = getIntMinus128(g_protocol_rx.data[OFFS_Z1_WATER_TEMP]);
+    mb_input_registers[MB_INPUT_Z2_WATER_TEMP] = getIntMinus128(g_protocol_rx.data[OFFS_Z2_WATER_TEMP]);
+    mb_input_registers[MB_INPUT_Z1_WATER_TARGET_TEMP] = getIntMinus128(g_protocol_rx.data[OFFS_Z1_WATER_TARGET_TEMP]);
+    mb_input_registers[MB_INPUT_Z2_WATER_TARGET_TEMP] = getIntMinus128(g_protocol_rx.data[OFFS_Z2_WATER_TARGET_TEMP]);
+    mb_input_registers[MB_INPUT_SECOND_INLET_TEMP] = getIntMinus128(g_protocol_rx.data[OFFS_SECOND_INLET_TEMP]);
+    mb_input_registers[MB_INPUT_ECONOMIZER_OUTLET_TEMP] = getIntMinus128(g_protocol_rx.data[OFFS_ECONOMIZER_OUTLET_TEMP]);
+    mb_input_registers[MB_INPUT_SECOND_ROOM_THERMO_TEMP] = getIntMinus128(g_protocol_rx.data[OFFS_SECOND_ROOM_THERMOSTAT_TEMP]);
     
     // Zone request temperatures (stored as int8_t, write as int16_t)
-    mb_input_registers[MB_INPUT_Z1_HEAT_REQUEST_TEMP] = (int16_t)getIntMinus128(g_protocol_rx.data[OFFS_Z1_HEAT_REQUEST_TEMP]);
-    mb_input_registers[MB_INPUT_Z1_COOL_REQUEST_TEMP] = (int16_t)getIntMinus128(g_protocol_rx.data[OFFS_Z1_COOL_REQUEST_TEMP]);
-    mb_input_registers[MB_INPUT_Z2_HEAT_REQUEST_TEMP] = (int16_t)getIntMinus128(g_protocol_rx.data[OFFS_Z2_HEAT_REQUEST_TEMP]);
-    mb_input_registers[MB_INPUT_Z2_COOL_REQUEST_TEMP] = (int16_t)getIntMinus128(g_protocol_rx.data[OFFS_Z2_COOL_REQUEST_TEMP]);
+    mb_input_registers[MB_INPUT_Z1_HEAT_REQUEST_TEMP] = getIntMinus128(g_protocol_rx.data[OFFS_Z1_HEAT_REQUEST_TEMP]);
+    mb_input_registers[MB_INPUT_Z1_COOL_REQUEST_TEMP] = getIntMinus128(g_protocol_rx.data[OFFS_Z1_COOL_REQUEST_TEMP]);
+    mb_input_registers[MB_INPUT_Z2_HEAT_REQUEST_TEMP] = getIntMinus128(g_protocol_rx.data[OFFS_Z2_HEAT_REQUEST_TEMP]);
+    mb_input_registers[MB_INPUT_Z2_COOL_REQUEST_TEMP] = getIntMinus128(g_protocol_rx.data[OFFS_Z2_COOL_REQUEST_TEMP]);
     
     // Zone curve settings (stored as int8_t, write as int16_t)
-    mb_input_registers[MB_INPUT_Z1_HEAT_CURVE_TARGET_HIGH] = (int16_t)getIntMinus128(g_protocol_rx.data[OFFS_Z1_HEAT_CURVE_TARGET_HIGH]);
-    mb_input_registers[MB_INPUT_Z1_HEAT_CURVE_TARGET_LOW] = (int16_t)getIntMinus128(g_protocol_rx.data[OFFS_Z1_HEAT_CURVE_TARGET_LOW]);
-    mb_input_registers[MB_INPUT_Z1_HEAT_CURVE_OUTSIDE_HIGH] = (int16_t)getIntMinus128(g_protocol_rx.data[OFFS_Z1_HEAT_CURVE_OUTSIDE_HIGH]);
-    mb_input_registers[MB_INPUT_Z1_HEAT_CURVE_OUTSIDE_LOW] = (int16_t)getIntMinus128(g_protocol_rx.data[OFFS_Z1_HEAT_CURVE_OUTSIDE_LOW]);
-    mb_input_registers[MB_INPUT_Z1_COOL_CURVE_TARGET_HIGH] = (int16_t)getIntMinus128(g_protocol_rx.data[OFFS_Z1_COOL_CURVE_TARGET_HIGH]);
-    mb_input_registers[MB_INPUT_Z1_COOL_CURVE_TARGET_LOW] = (int16_t)getIntMinus128(g_protocol_rx.data[OFFS_Z1_COOL_CURVE_TARGET_LOW]);
-    mb_input_registers[MB_INPUT_Z1_COOL_CURVE_OUTSIDE_HIGH] = (int16_t)getIntMinus128(g_protocol_rx.data[OFFS_Z1_COOL_CURVE_OUTSIDE_HIGH]);
-    mb_input_registers[MB_INPUT_Z1_COOL_CURVE_OUTSIDE_LOW] = (int16_t)getIntMinus128(g_protocol_rx.data[OFFS_Z1_COOL_CURVE_OUTSIDE_LOW]);
-    mb_input_registers[MB_INPUT_Z2_HEAT_CURVE_TARGET_HIGH] = (int16_t)getIntMinus128(g_protocol_rx.data[OFFS_Z2_HEAT_CURVE_TARGET_HIGH]);
-    mb_input_registers[MB_INPUT_Z2_HEAT_CURVE_TARGET_LOW] = (int16_t)getIntMinus128(g_protocol_rx.data[OFFS_Z2_HEAT_CURVE_TARGET_LOW]);
-    mb_input_registers[MB_INPUT_Z2_HEAT_CURVE_OUTSIDE_HIGH] = (int16_t)getIntMinus128(g_protocol_rx.data[OFFS_Z2_HEAT_CURVE_OUTSIDE_HIGH]);
-    mb_input_registers[MB_INPUT_Z2_HEAT_CURVE_OUTSIDE_LOW] = (int16_t)getIntMinus128(g_protocol_rx.data[OFFS_Z2_HEAT_CURVE_OUTSIDE_LOW]);
-    mb_input_registers[MB_INPUT_Z2_COOL_CURVE_TARGET_HIGH] = (int16_t)getIntMinus128(g_protocol_rx.data[OFFS_Z2_COOL_CURVE_TARGET_HIGH]);
-    mb_input_registers[MB_INPUT_Z2_COOL_CURVE_TARGET_LOW] = (int16_t)getIntMinus128(g_protocol_rx.data[OFFS_Z2_COOL_CURVE_TARGET_LOW]);
-    mb_input_registers[MB_INPUT_Z2_COOL_CURVE_OUTSIDE_HIGH] = (int16_t)getIntMinus128(g_protocol_rx.data[OFFS_Z2_COOL_CURVE_OUTSIDE_HIGH]);
-    mb_input_registers[MB_INPUT_Z2_COOL_CURVE_OUTSIDE_LOW] = (int16_t)getIntMinus128(g_protocol_rx.data[OFFS_Z2_COOL_CURVE_OUTSIDE_LOW]);
+    mb_input_registers[MB_INPUT_Z1_HEAT_CURVE_TARGET_HIGH] = getIntMinus128(g_protocol_rx.data[OFFS_Z1_HEAT_CURVE_TARGET_HIGH]);
+    mb_input_registers[MB_INPUT_Z1_HEAT_CURVE_TARGET_LOW] = getIntMinus128(g_protocol_rx.data[OFFS_Z1_HEAT_CURVE_TARGET_LOW]);
+    mb_input_registers[MB_INPUT_Z1_HEAT_CURVE_OUTSIDE_HIGH] = getIntMinus128(g_protocol_rx.data[OFFS_Z1_HEAT_CURVE_OUTSIDE_HIGH]);
+    mb_input_registers[MB_INPUT_Z1_HEAT_CURVE_OUTSIDE_LOW] = getIntMinus128(g_protocol_rx.data[OFFS_Z1_HEAT_CURVE_OUTSIDE_LOW]);
+    mb_input_registers[MB_INPUT_Z1_COOL_CURVE_TARGET_HIGH] = getIntMinus128(g_protocol_rx.data[OFFS_Z1_COOL_CURVE_TARGET_HIGH]);
+    mb_input_registers[MB_INPUT_Z1_COOL_CURVE_TARGET_LOW] = getIntMinus128(g_protocol_rx.data[OFFS_Z1_COOL_CURVE_TARGET_LOW]);
+    mb_input_registers[MB_INPUT_Z1_COOL_CURVE_OUTSIDE_HIGH] = getIntMinus128(g_protocol_rx.data[OFFS_Z1_COOL_CURVE_OUTSIDE_HIGH]);
+    mb_input_registers[MB_INPUT_Z1_COOL_CURVE_OUTSIDE_LOW] = getIntMinus128(g_protocol_rx.data[OFFS_Z1_COOL_CURVE_OUTSIDE_LOW]);
+    mb_input_registers[MB_INPUT_Z2_HEAT_CURVE_TARGET_HIGH] = getIntMinus128(g_protocol_rx.data[OFFS_Z2_HEAT_CURVE_TARGET_HIGH]);
+    mb_input_registers[MB_INPUT_Z2_HEAT_CURVE_TARGET_LOW] = getIntMinus128(g_protocol_rx.data[OFFS_Z2_HEAT_CURVE_TARGET_LOW]);
+    mb_input_registers[MB_INPUT_Z2_HEAT_CURVE_OUTSIDE_HIGH] = getIntMinus128(g_protocol_rx.data[OFFS_Z2_HEAT_CURVE_OUTSIDE_HIGH]);
+    mb_input_registers[MB_INPUT_Z2_HEAT_CURVE_OUTSIDE_LOW] = getIntMinus128(g_protocol_rx.data[OFFS_Z2_HEAT_CURVE_OUTSIDE_LOW]);
+    mb_input_registers[MB_INPUT_Z2_COOL_CURVE_TARGET_HIGH] = getIntMinus128(g_protocol_rx.data[OFFS_Z2_COOL_CURVE_TARGET_HIGH]);
+    mb_input_registers[MB_INPUT_Z2_COOL_CURVE_TARGET_LOW] = getIntMinus128(g_protocol_rx.data[OFFS_Z2_COOL_CURVE_TARGET_LOW]);
+    mb_input_registers[MB_INPUT_Z2_COOL_CURVE_OUTSIDE_HIGH] = getIntMinus128(g_protocol_rx.data[OFFS_Z2_COOL_CURVE_OUTSIDE_HIGH]);
+    mb_input_registers[MB_INPUT_Z2_COOL_CURVE_OUTSIDE_LOW] = getIntMinus128(g_protocol_rx.data[OFFS_Z2_COOL_CURVE_OUTSIDE_LOW]);
     
     // Additional operation states
-    mb_input_registers[MB_INPUT_MAIN_SCHEDULE_STATE] = (int16_t)getBit1and2(g_protocol_rx.data[OFFS_MAIN_SCHEDULE_STATE]);
+    mb_input_registers[MB_INPUT_MAIN_SCHEDULE_STATE] = getBit1and2(g_protocol_rx.data[OFFS_MAIN_SCHEDULE_STATE]);
     
     // Technical parameters
-    mb_input_registers[MB_INPUT_FAN1_MOTOR_SPEED] = (int16_t)getIntMinus1Times10(g_protocol_rx.data[OFFS_FAN1_MOTOR_SPEED]);
-    mb_input_registers[MB_INPUT_FAN2_MOTOR_SPEED] = (int16_t)getIntMinus1Times10(g_protocol_rx.data[OFFS_FAN2_MOTOR_SPEED]);
+    mb_input_registers[MB_INPUT_FAN1_MOTOR_SPEED] = getIntMinus1Times10(g_protocol_rx.data[OFFS_FAN1_MOTOR_SPEED]);
+    mb_input_registers[MB_INPUT_FAN2_MOTOR_SPEED] = getIntMinus1Times10(g_protocol_rx.data[OFFS_FAN2_MOTOR_SPEED]);
     mb_input_registers[MB_INPUT_HIGH_PRESSURE] = getIntMinus1Div5(g_protocol_rx.data[OFFS_HIGH_PRESSURE]);
-    mb_input_registers[MB_INPUT_PUMP_SPEED] = (int16_t)getIntMinus1Times50(g_protocol_rx.data[OFFS_PUMP_SPEED]);
+    mb_input_registers[MB_INPUT_PUMP_SPEED_CPY] = mb_input_registers[MB_INPUT_PUMP_SPEED] = 
+        getIntMinus1Times50(g_protocol_rx.data[OFFS_PUMP_SPEED]);
     mb_input_registers[MB_INPUT_LOW_PRESSURE] = getIntMinus1Times50(g_protocol_rx.data[OFFS_LOW_PRESSURE]);
-    mb_input_registers[MB_INPUT_COMPRESSOR_CURRENT] = getIntMinus1Div5(g_protocol_rx.data[OFFS_COMPRESSOR_CURRENT]);
-    mb_input_registers[MB_INPUT_PUMP_DUTY] = (int16_t)getIntMinus1(g_protocol_rx.data[OFFS_PUMP_DUTY]);
-    mb_input_registers[MB_INPUT_MAX_PUMP_DUTY] = (int16_t)getIntMinus1(g_protocol_rx.data[OFFS_MAX_PUMP_DUTY]);
+    mb_input_registers[MB_INPUT_COMPRESSOR_CURRENT_CPY] = mb_input_registers[MB_INPUT_COMPRESSOR_CURRENT] = 
+        getIntMinus1Div5(g_protocol_rx.data[OFFS_COMPRESSOR_CURRENT]);
+    mb_input_registers[MB_INPUT_PUMP_DUTY_CPY] = mb_input_registers[MB_INPUT_PUMP_DUTY] =
+        getIntMinus1(g_protocol_rx.data[OFFS_PUMP_DUTY]);
+    mb_input_registers[MB_INPUT_MAX_PUMP_DUTY] = getIntMinus1(g_protocol_rx.data[OFFS_MAX_PUMP_DUTY]);
     
     // Heater states
-    mb_input_registers[MB_INPUT_DHW_HEATER_STATE] = (int16_t)getBit5and6(g_protocol_rx.data[OFFS_DHW_HEATER_STATE]);
-    mb_input_registers[MB_INPUT_ROOM_HEATER_STATE] = (int16_t)getBit7and8(g_protocol_rx.data[OFFS_ROOM_HEATER_STATE]);
-    mb_input_registers[MB_INPUT_INTERNAL_HEATER_STATE] = (int16_t)getBit7and8(g_protocol_rx.data[OFFS_INTERNAL_HEATER_STATE]);
-    mb_input_registers[MB_INPUT_EXTERNAL_HEATER_STATE] = (int16_t)getBit5and6(g_protocol_rx.data[OFFS_EXTERNAL_HEATER_STATE]);
-    mb_input_registers[MB_INPUT_FORCE_HEATER_STATE] = (int16_t)getBit5and6(g_protocol_rx.data[OFFS_FORCE_HEATER_STATE]);
-    mb_input_registers[MB_INPUT_STERILIZATION_STATE] = (int16_t)getBit5and6(g_protocol_rx.data[OFFS_STERILIZATION_STATE]);
-    mb_input_registers[MB_INPUT_STERILIZATION_TEMP] = (int16_t)getIntMinus128(g_protocol_rx.data[OFFS_STERILIZATION_TEMP]);
-    mb_input_registers[MB_INPUT_STERILIZATION_MAX_TIME] = (int16_t)getIntMinus1(g_protocol_rx.data[OFFS_STERILIZATION_MAX_TIME]);
+    mb_input_registers[MB_INPUT_DHW_HEATER_STATE] = getBit5and6(g_protocol_rx.data[OFFS_DHW_HEATER_STATE]);
+    mb_input_registers[MB_INPUT_ROOM_HEATER_STATE] = getBit7and8(g_protocol_rx.data[OFFS_ROOM_HEATER_STATE]);
+    mb_input_registers[MB_INPUT_INTERNAL_HEATER_STATE] = getBit7and8(g_protocol_rx.data[OFFS_INTERNAL_HEATER_STATE]);
+    mb_input_registers[MB_INPUT_EXTERNAL_HEATER_STATE] = getBit5and6(g_protocol_rx.data[OFFS_EXTERNAL_HEATER_STATE]);
+    mb_input_registers[MB_INPUT_FORCE_HEATER_STATE] = getBit5and6(g_protocol_rx.data[OFFS_FORCE_HEATER_STATE]);
+    mb_input_registers[MB_INPUT_STERILIZATION_STATE] = getBit5and6(g_protocol_rx.data[OFFS_STERILIZATION_STATE]);
+    mb_input_registers[MB_INPUT_STERILIZATION_TEMP] = getIntMinus128(g_protocol_rx.data[OFFS_STERILIZATION_TEMP]);
+    mb_input_registers[MB_INPUT_STERILIZATION_MAX_TIME] = getIntMinus1(g_protocol_rx.data[OFFS_STERILIZATION_MAX_TIME]);
     
     // Deltas and shifts (stored as int16_t * 100)
-    mb_input_registers[MB_INPUT_DHW_HEAT_DELTA] = (int16_t)getIntMinus128(g_protocol_rx.data[OFFS_DHW_HEAT_DELTA]);
-    mb_input_registers[MB_INPUT_HEAT_DELTA] = (int16_t)getIntMinus128(g_protocol_rx.data[OFFS_HEAT_DELTA]);
-    mb_input_registers[MB_INPUT_COOL_DELTA] = (int16_t)getIntMinus128(g_protocol_rx.data[OFFS_COOL_DELTA]);
-    mb_input_registers[MB_INPUT_DHW_HOLIDAY_SHIFT_TEMP] = (int16_t)getIntMinus128(g_protocol_rx.data[OFFS_DHW_HOLIDAY_SHIFT_TEMP]);
-    mb_input_registers[MB_INPUT_ROOM_HOLIDAY_SHIFT_TEMP] = (int16_t)getIntMinus128(g_protocol_rx.data[OFFS_ROOM_HOLIDAY_SHIFT_TEMP]);
-    mb_input_registers[MB_INPUT_BUFFER_TANK_DELTA] = (int16_t)getIntMinus128(g_protocol_rx.data[OFFS_BUFFER_TANK_DELTA]);
+    mb_input_registers[MB_INPUT_DHW_HEAT_DELTA] = getIntMinus128(g_protocol_rx.data[OFFS_DHW_HEAT_DELTA]);
+    mb_input_registers[MB_INPUT_HEAT_DELTA] = getIntMinus128(g_protocol_rx.data[OFFS_HEAT_DELTA]);
+    mb_input_registers[MB_INPUT_COOL_DELTA] = getIntMinus128(g_protocol_rx.data[OFFS_COOL_DELTA]);
+    mb_input_registers[MB_INPUT_DHW_HOLIDAY_SHIFT_TEMP] = getIntMinus128(g_protocol_rx.data[OFFS_DHW_HOLIDAY_SHIFT_TEMP]);
+    mb_input_registers[MB_INPUT_ROOM_HOLIDAY_SHIFT_TEMP] = getIntMinus128(g_protocol_rx.data[OFFS_ROOM_HOLIDAY_SHIFT_TEMP]);
+    mb_input_registers[MB_INPUT_BUFFER_TANK_DELTA] = getIntMinus128(g_protocol_rx.data[OFFS_BUFFER_TANK_DELTA]);
     
     // Mode settings
-    mb_input_registers[MB_INPUT_HEATING_MODE] = (int16_t)getBit7and8(g_protocol_rx.data[OFFS_HEATING_MODE]);
-    mb_input_registers[MB_INPUT_HEATING_OFF_OUTDOOR_TEMP] = (int16_t)getIntMinus128(g_protocol_rx.data[OFFS_HEATING_OFF_OUTDOOR_TEMP]);
-    mb_input_registers[MB_INPUT_HEATER_ON_OUTDOOR_TEMP] = (int16_t)getIntMinus128(g_protocol_rx.data[OFFS_HEATER_ON_OUTDOOR_TEMP]);
-    mb_input_registers[MB_INPUT_HEAT_TO_COOL_TEMP] = (int16_t)getIntMinus128(g_protocol_rx.data[OFFS_HEAT_TO_COOL_TEMP]);
-    mb_input_registers[MB_INPUT_COOL_TO_HEAT_TEMP] = (int16_t)getIntMinus128(g_protocol_rx.data[OFFS_COOL_TO_HEAT_TEMP]);
-    mb_input_registers[MB_INPUT_COOLING_MODE] = (int16_t)getBit5and6(g_protocol_rx.data[OFFS_COOLING_MODE]);
+    mb_input_registers[MB_INPUT_HEATING_MODE_CPY] = mb_input_registers[MB_INPUT_HEATING_MODE] =
+        getBit7and8(g_protocol_rx.data[OFFS_HEATING_MODE]);
+    mb_input_registers[MB_INPUT_HEATING_OFF_OUTDOOR_TEMP] = getIntMinus128(g_protocol_rx.data[OFFS_HEATING_OFF_OUTDOOR_TEMP]);
+    mb_input_registers[MB_INPUT_HEATER_ON_OUTDOOR_TEMP] = getIntMinus128(g_protocol_rx.data[OFFS_HEATER_ON_OUTDOOR_TEMP]);
+    mb_input_registers[MB_INPUT_HEAT_TO_COOL_TEMP] = getIntMinus128(g_protocol_rx.data[OFFS_HEAT_TO_COOL_TEMP]);
+    mb_input_registers[MB_INPUT_COOL_TO_HEAT_TEMP] = getIntMinus128(g_protocol_rx.data[OFFS_COOL_TO_HEAT_TEMP]);
+    mb_input_registers[MB_INPUT_COOLING_MODE_CPY] = mb_input_registers[MB_INPUT_COOLING_MODE] =
+        getBit5and6(g_protocol_rx.data[OFFS_COOLING_MODE]);
     
     // Solar and buffer settings
-    mb_input_registers[MB_INPUT_BUFFER_INSTALLED] = (int16_t)getBit5and6(g_protocol_rx.data[OFFS_BUFFER_INSTALLED]);
-    mb_input_registers[MB_INPUT_DHW_INSTALLED] = (int16_t)getBit7and8(g_protocol_rx.data[OFFS_DHW_INSTALLED]);
-    mb_input_registers[MB_INPUT_SOLAR_MODE] = (int16_t)getBit3and4(g_protocol_rx.data[OFFS_SOLAR_MODE]);
-    mb_input_registers[MB_INPUT_SOLAR_ON_DELTA] = (int16_t)getIntMinus128(g_protocol_rx.data[OFFS_SOLAR_ON_DELTA]);
-    mb_input_registers[MB_INPUT_SOLAR_OFF_DELTA] = (int16_t)getIntMinus128(g_protocol_rx.data[OFFS_SOLAR_OFF_DELTA]);
-    mb_input_registers[MB_INPUT_SOLAR_FROST_PROTECTION] = (int16_t)getIntMinus128(g_protocol_rx.data[OFFS_SOLAR_FROST_PROTECTION]);
-    mb_input_registers[MB_INPUT_SOLAR_HIGH_LIMIT] = (int16_t)getIntMinus128(g_protocol_rx.data[OFFS_SOLAR_HIGH_LIMIT]);
+    mb_input_registers[MB_INPUT_BUFFER_INSTALLED] = getBit5and6(g_protocol_rx.data[OFFS_BUFFER_INSTALLED]);
+    mb_input_registers[MB_INPUT_DHW_INSTALLED] = getBit7and8(g_protocol_rx.data[OFFS_DHW_INSTALLED]);
+    mb_input_registers[MB_INPUT_SOLAR_MODE] = getBit3and4(g_protocol_rx.data[OFFS_SOLAR_MODE]);
+    mb_input_registers[MB_INPUT_SOLAR_ON_DELTA] = getIntMinus128(g_protocol_rx.data[OFFS_SOLAR_ON_DELTA]);
+    mb_input_registers[MB_INPUT_SOLAR_OFF_DELTA] = getIntMinus128(g_protocol_rx.data[OFFS_SOLAR_OFF_DELTA]);
+    mb_input_registers[MB_INPUT_SOLAR_FROST_PROTECTION] = getIntMinus128(g_protocol_rx.data[OFFS_SOLAR_FROST_PROTECTION]);
+    mb_input_registers[MB_INPUT_SOLAR_HIGH_LIMIT] = getIntMinus128(g_protocol_rx.data[OFFS_SOLAR_HIGH_LIMIT]);
     
     // Pump and liquid settings
-    mb_input_registers[MB_INPUT_PUMP_FLOWRATE_MODE] = (int16_t)getBit3and4(g_protocol_rx.data[OFFS_PUMP_FLOWRATE_MODE]);
-    mb_input_registers[MB_INPUT_LIQUID_TYPE] = (int16_t)getBit1(g_protocol_rx.data[OFFS_LIQUID_TYPE]);
-    mb_input_registers[MB_INPUT_ALT_EXTERNAL_SENSOR] = (int16_t)getBit3and4(g_protocol_rx.data[OFFS_ALT_EXTERNAL_SENSOR]);
-    mb_input_registers[MB_INPUT_ANTI_FREEZE_MODE] = (int16_t)getBit5and6(g_protocol_rx.data[OFFS_ANTI_FREEZE_MODE]);
-    mb_input_registers[MB_INPUT_OPTIONAL_PCB] = (int16_t)getBit7and8(g_protocol_rx.data[OFFS_OPTIONAL_PCB]);
+    mb_input_registers[MB_INPUT_PUMP_FLOWRATE_MODE] = getBit3and4(g_protocol_rx.data[OFFS_PUMP_FLOWRATE_MODE]);
+    mb_input_registers[MB_INPUT_LIQUID_TYPE] = getBit1(g_protocol_rx.data[OFFS_LIQUID_TYPE]);
+    mb_input_registers[MB_INPUT_ALT_EXTERNAL_SENSOR] = getBit3and4(g_protocol_rx.data[OFFS_ALT_EXTERNAL_SENSOR]);
+    mb_input_registers[MB_INPUT_ANTI_FREEZE_MODE] = getBit5and6(g_protocol_rx.data[OFFS_ANTI_FREEZE_MODE]);
+    mb_input_registers[MB_INPUT_OPTIONAL_PCB] = getBit7and8(g_protocol_rx.data[OFFS_OPTIONAL_PCB]);
     
     // Zone sensor settings
-    mb_input_registers[MB_INPUT_Z1_SENSOR_SETTINGS] = (int16_t)getSecondByte(g_protocol_rx.data[OFFS_Z1_SENSOR_SETTINGS]);
-    mb_input_registers[MB_INPUT_Z2_SENSOR_SETTINGS] = (int16_t)getFirstByte(g_protocol_rx.data[OFFS_Z2_SENSOR_SETTINGS]);
+    mb_input_registers[MB_INPUT_Z1_SENSOR_SETTINGS] = getSecondByte(g_protocol_rx.data[OFFS_Z1_SENSOR_SETTINGS]);
+    mb_input_registers[MB_INPUT_Z2_SENSOR_SETTINGS] = getFirstByte(g_protocol_rx.data[OFFS_Z2_SENSOR_SETTINGS]);
     
     // External controls
-    mb_input_registers[MB_INPUT_EXTERNAL_PAD_HEATER] = (int16_t)getBit3and4(g_protocol_rx.data[OFFS_EXTERNAL_PAD_HEATER]);
-    mb_input_registers[MB_INPUT_WATER_PRESSURE] = getIntMinus1Div50(g_protocol_rx.data[OFFS_WATER_PRESSURE]);
-    mb_input_registers[MB_INPUT_EXTERNAL_CONTROL] = (int16_t)getBit7and8(g_protocol_rx.data[OFFS_EXTERNAL_CONTROL]);
-    mb_input_registers[MB_INPUT_EXTERNAL_HEAT_COOL_CONTROL] = (int16_t)getBit5and6(g_protocol_rx.data[OFFS_EXTERNAL_HEAT_COOL_CONTROL]);
-    mb_input_registers[MB_INPUT_EXTERNAL_ERROR_SIGNAL] = (int16_t)getBit3and4(g_protocol_rx.data[OFFS_EXTERNAL_ERROR_SIGNAL]);
-    mb_input_registers[MB_INPUT_EXTERNAL_COMPRESSOR_CONTROL] = (int16_t)getBit1and2(g_protocol_rx.data[OFFS_EXTERNAL_COMPRESSOR_CONTROL]);
+    mb_input_registers[MB_INPUT_EXTERNAL_PAD_HEATER] = getBit3and4(g_protocol_rx.data[OFFS_EXTERNAL_PAD_HEATER]);
+    mb_input_registers[MB_INPUT_WATER_PRESSURE_CPY] = mb_input_registers[MB_INPUT_WATER_PRESSURE] = 
+        getIntMinus1Div50(g_protocol_rx.data[OFFS_WATER_PRESSURE]);
+    mb_input_registers[MB_INPUT_EXTERNAL_CONTROL_CPY] = mb_input_registers[MB_INPUT_EXTERNAL_CONTROL] = 
+        getBit7and8(g_protocol_rx.data[OFFS_EXTERNAL_CONTROL]);
+    mb_input_registers[MB_INPUT_EXTERNAL_HEAT_COOL_CONTROL] = getBit5and6(g_protocol_rx.data[OFFS_EXTERNAL_HEAT_COOL_CONTROL]);
+    mb_input_registers[MB_INPUT_EXTERNAL_ERROR_SIGNAL_CPY] = mb_input_registers[MB_INPUT_EXTERNAL_ERROR_SIGNAL] = 
+        getBit3and4(g_protocol_rx.data[OFFS_EXTERNAL_ERROR_SIGNAL]);
+    mb_input_registers[MB_INPUT_EXTERNAL_COMPRESSOR_CONTROL] = getBit1and2(g_protocol_rx.data[OFFS_EXTERNAL_COMPRESSOR_CONTROL]);
     
     // Pump states
-    mb_input_registers[MB_INPUT_Z2_PUMP_STATE] = (int16_t)getBit1and2(g_protocol_rx.data[OFFS_Z2_PUMP_STATE]);
-    mb_input_registers[MB_INPUT_Z1_PUMP_STATE] = (int16_t)getBit3and4(g_protocol_rx.data[OFFS_Z1_PUMP_STATE]);
-    mb_input_registers[MB_INPUT_TWO_WAY_VALVE_STATE] = (int16_t)getBit5and6(g_protocol_rx.data[OFFS_TWOWAY_VALVE_STATE]);
-    mb_input_registers[MB_INPUT_THREE_WAY_VALVE_STATE2] = (int16_t)getBit7and8(g_protocol_rx.data[OFFS_THREEWAY_VALVE_STATE2]);
+    mb_input_registers[MB_INPUT_Z2_PUMP_STATE] = getBit1and2(g_protocol_rx.data[OFFS_Z2_PUMP_STATE]);
+    mb_input_registers[MB_INPUT_Z1_PUMP_STATE] = getBit3and4(g_protocol_rx.data[OFFS_Z1_PUMP_STATE]);
+    mb_input_registers[MB_INPUT_TWO_WAY_VALVE_STATE_CPY] = mb_input_registers[MB_INPUT_TWO_WAY_VALVE_STATE] = 
+        getBit5and6(g_protocol_rx.data[OFFS_TWOWAY_VALVE_STATE]);
+    mb_input_registers[MB_INPUT_THREE_WAY_VALVE_STATE2_CPY] = mb_input_registers[MB_INPUT_THREE_WAY_VALVE_STATE2] = 
+        getBit7and8(g_protocol_rx.data[OFFS_THREEWAY_VALVE_STATE2]);
     
     // Valve PID settings (stored as int16_t * 100)
     mb_input_registers[MB_INPUT_Z1_VALVE_PID] = getValvePID(g_protocol_rx.data[OFFS_Z1_VALVE_PID]);
     mb_input_registers[MB_INPUT_Z2_VALVE_PID] = getValvePID(g_protocol_rx.data[OFFS_Z2_VALVE_PID]);
     
     // Bivalent settings
-    mb_input_registers[MB_INPUT_BIVALENT_CONTROL] = (int16_t)getBit7and8(g_protocol_rx.data[OFFS_BIVALENT_CONTROL]);
-    mb_input_registers[MB_INPUT_BIVALENT_MODE] = (int16_t)getBit5and6(g_protocol_rx.data[OFFS_BIVALENT_MODE]);
-    mb_input_registers[MB_INPUT_BIVALENT_START_TEMP] = (int16_t)getIntMinus128(g_protocol_rx.data[OFFS_BIVALENT_START_TEMP]);
-    mb_input_registers[MB_INPUT_BIVALENT_ADVANCED_HEAT] = (int16_t)getBit3and4(g_protocol_rx.data[OFFS_BIVALENT_ADV_HEAT]);
-    mb_input_registers[MB_INPUT_BIVALENT_ADVANCED_DHW] = (int16_t)getBit1and2(g_protocol_rx.data[OFFS_BIVALENT_ADV_DHW]);
-    mb_input_registers[MB_INPUT_BIVALENT_ADVANCED_START_TEMP] = (int16_t)getIntMinus128(g_protocol_rx.data[OFFS_BIVALENT_ADV_START_TEMP]);
-    mb_input_registers[MB_INPUT_BIVALENT_ADVANCED_STOP_TEMP] = (int16_t)getIntMinus128(g_protocol_rx.data[OFFS_BIVALENT_ADV_STOP_TEMP]);
-    mb_input_registers[MB_INPUT_BIVALENT_ADVANCED_START_DELAY] = (int16_t)getIntMinus1(g_protocol_rx.data[OFFS_BIVALENT_ADV_START_DELAY]);
-    mb_input_registers[MB_INPUT_BIVALENT_ADVANCED_STOP_DELAY] = (int16_t)getIntMinus1(g_protocol_rx.data[OFFS_BIVALENT_ADV_STOP_DELAY]);
-    mb_input_registers[MB_INPUT_BIVALENT_ADVANCED_DHW_DELAY] = (int16_t)getIntMinus1(g_protocol_rx.data[OFFS_BIVALENT_ADV_DHW_DELAY]);
+    mb_input_registers[MB_INPUT_BIVALENT_CONTROL] = getBit7and8(g_protocol_rx.data[OFFS_BIVALENT_CONTROL]);
+    mb_input_registers[MB_INPUT_BIVALENT_MODE] = getBit5and6(g_protocol_rx.data[OFFS_BIVALENT_MODE]);
+    mb_input_registers[MB_INPUT_BIVALENT_START_TEMP] = getIntMinus128(g_protocol_rx.data[OFFS_BIVALENT_START_TEMP]);
+    mb_input_registers[MB_INPUT_BIVALENT_ADVANCED_HEAT] = getBit3and4(g_protocol_rx.data[OFFS_BIVALENT_ADV_HEAT]);
+    mb_input_registers[MB_INPUT_BIVALENT_ADVANCED_DHW] = getBit1and2(g_protocol_rx.data[OFFS_BIVALENT_ADV_DHW]);
+    mb_input_registers[MB_INPUT_BIVALENT_ADVANCED_START_TEMP] = getIntMinus128(g_protocol_rx.data[OFFS_BIVALENT_ADV_START_TEMP]);
+    mb_input_registers[MB_INPUT_BIVALENT_ADVANCED_STOP_TEMP] = getIntMinus128(g_protocol_rx.data[OFFS_BIVALENT_ADV_STOP_TEMP]);
+    mb_input_registers[MB_INPUT_BIVALENT_ADVANCED_START_DELAY] = getIntMinus1(g_protocol_rx.data[OFFS_BIVALENT_ADV_START_DELAY]);
+    mb_input_registers[MB_INPUT_BIVALENT_ADVANCED_STOP_DELAY] = getIntMinus1(g_protocol_rx.data[OFFS_BIVALENT_ADV_STOP_DELAY]);
+    mb_input_registers[MB_INPUT_BIVALENT_ADVANCED_DHW_DELAY] = getIntMinus1(g_protocol_rx.data[OFFS_BIVALENT_ADV_DHW_DELAY]);
     
     // Timing settings
-    mb_input_registers[MB_INPUT_HEATER_DELAY_TIME] = (int16_t)getIntMinus1(g_protocol_rx.data[OFFS_HEATER_DELAY_TIME]);
-    mb_input_registers[MB_INPUT_HEATER_START_DELTA] = (int16_t)getIntMinus128(g_protocol_rx.data[OFFS_HEATER_START_DELTA]);
-    mb_input_registers[MB_INPUT_HEATER_STOP_DELTA] = (int16_t)getIntMinus128(g_protocol_rx.data[OFFS_HEATER_STOP_DELTA]);
+    mb_input_registers[MB_INPUT_HEATER_DELAY_TIME] = getIntMinus1(g_protocol_rx.data[OFFS_HEATER_DELAY_TIME]);
+    mb_input_registers[MB_INPUT_HEATER_START_DELTA] = getIntMinus128(g_protocol_rx.data[OFFS_HEATER_START_DELTA]);
+    mb_input_registers[MB_INPUT_HEATER_STOP_DELTA] = getIntMinus128(g_protocol_rx.data[OFFS_HEATER_STOP_DELTA]);
     
     // Operation hours
-    mb_input_registers[MB_INPUT_ROOM_HEATER_OPS_HOURS] = (int16_t)getUint16(OFFS_ROOM_HEATER_OPERATIONS_HOURS);
-    mb_input_registers[MB_INPUT_DHW_HEATER_OPS_HOURS] = (int16_t)getUint16(OFFS_DHW_HEATER_OPERATIONS_HOURS);
+    mb_input_registers[MB_INPUT_ROOM_HEATER_OPS_HOURS] = getUint16(OFFS_ROOM_HEATER_OPERATIONS_HOURS);
+    mb_input_registers[MB_INPUT_DHW_HEATER_OPS_HOURS] = getUint16(OFFS_DHW_HEATER_OPERATIONS_HOURS);
     
     // Error and model (string topics) — write directly to Modbus registers
     {
         // Error string is at bytes 113-114 (Error_type and Error_number)
-        char error_state_str[16];
-        int Error_type = (int)(g_protocol_rx.data[OFFS_ERROR_TYPE]);
-        int Error_number = ((int)(g_protocol_rx.data[OFFS_ERROR_NUMBER])) - 17;
-        if (Error_type == 177) { // B1=F type error
-            snprintf(error_state_str, sizeof(error_state_str), "F%02X", Error_number);
-        } else if (Error_type == 161) { // A1=H type error
-            snprintf(error_state_str, sizeof(error_state_str), "H%02X", Error_number);
+        int error_type = (int)(g_protocol_rx.data[OFFS_ERROR_TYPE]);
+        int error_number = ((int)(g_protocol_rx.data[OFFS_ERROR_NUMBER])) - 17;
+        if (error_type == 177) { // B1=F type error
+            mb_input_registers[MB_INPUT_ERROR_TYPE_CPY] = mb_input_registers[MB_INPUT_ERROR_TYPE] = (int)'F';
+            mb_input_registers[MB_INPUT_ERROR_NUMBER_CPY] = mb_input_registers[MB_INPUT_ERROR_NUMBER] = error_number;
+        } else if (error_type == 161) { // A1=H type error
+            mb_input_registers[MB_INPUT_ERROR_TYPE_CPY] = mb_input_registers[MB_INPUT_ERROR_TYPE] = (int)'H';
+            mb_input_registers[MB_INPUT_ERROR_NUMBER_CPY] = mb_input_registers[MB_INPUT_ERROR_NUMBER] = error_number;
         } else {
-            strcpy(error_state_str, "No error");
+            mb_input_registers[MB_INPUT_ERROR_TYPE_CPY] = mb_input_registers[MB_INPUT_ERROR_TYPE] = 0;
+            mb_input_registers[MB_INPUT_ERROR_NUMBER_CPY] = mb_input_registers[MB_INPUT_ERROR_NUMBER] = 0;
         }
-        copy_string_to_registers(MB_INPUT_ERROR_STATE_0, error_state_str, 16);
     }
+    // Model string is at bytes 129-138 (10 bytes)
     {
-        // Model string is at bytes 129-138 (10 bytes)
-        uint8_t model[10] = { g_protocol_rx.data[129], g_protocol_rx.data[130], g_protocol_rx.data[131], 
-                             g_protocol_rx.data[132], g_protocol_rx.data[133], g_protocol_rx.data[134], 
-                             g_protocol_rx.data[135], g_protocol_rx.data[136], g_protocol_rx.data[137], 
-                             g_protocol_rx.data[138] };
-        char modelResult[31];
-        for (size_t i = 0; i < 10; ++i) {
-            sprintf(&modelResult[i*3], "%02X ", model[i]);
+        int data_offset = OFFS_HP_MODEL_0;
+        for(int i = 0; i < 5; i++) {
+            mb_input_registers[MB_INPUT_HP_MODEL_0 + i] = (g_protocol_rx.data[data_offset] << 8) | g_protocol_rx.data[data_offset + 1];
+            data_offset += 2;
         }
-        modelResult[29] = '\0';
-        copy_string_to_registers(MB_INPUT_HP_MODEL_0, modelResult, 32);
     }
-    
-    // Unlock mutex after all register writes complete
-    mb_registers_unlock();
     
     ESP_LOGD(TAG, "Main data decoded successfully");
     return ESP_OK;
@@ -533,12 +552,6 @@ esp_err_t decode_main_data(void) {
 esp_err_t decode_extra_data(void) {
     ESP_LOGD(TAG, "Decoding extra data");
     
-    // Lock mutex before accessing registers (shared resource with Modbus task)
-    if (!mb_registers_lock(portMAX_DELAY)) {
-        ESP_LOGE(TAG, "Failed to lock registers mutex");
-        return ESP_ERR_INVALID_STATE;
-    }
-    
     // Decode directly into Modbus input registers (uint16_t -> int16_t, compatible)
     mb_input_registers[MB_INPUT_HEAT_POWER_CONSUMPTION_EXTRA] = (int16_t)getUint16(OFFS_XTOP_HEAT_POWER_CONSUMPTION_EXTRA);
     mb_input_registers[MB_INPUT_COOL_POWER_CONSUMPTION_EXTRA] = (int16_t)getUint16(OFFS_XTOP_COOL_POWER_CONSUMPTION_EXTRA);
@@ -547,10 +560,7 @@ esp_err_t decode_extra_data(void) {
     mb_input_registers[MB_INPUT_COOL_POWER_PRODUCTION_EXTRA] = (int16_t)getUint16(OFFS_XTOP_COOL_POWER_PRODUCTION_EXTRA);
     mb_input_registers[MB_INPUT_DHW_POWER_PRODUCTION_EXTRA] = (int16_t)getUint16(OFFS_XTOP_DHW_POWER_PRODUCTION_EXTRA);
     
-    // Unlock mutex after all register writes complete
-    mb_registers_unlock();
-    
-    ESP_LOGD(TAG, "Extra data decoded successfully (written directly to Modbus registers)");
+    ESP_LOGD(TAG, "Extra data decoded successfully");
     return ESP_OK;
 }
 
@@ -560,12 +570,6 @@ esp_err_t decode_extra_data(void) {
  */
 esp_err_t decode_opt_data(void) {
     ESP_LOGD(TAG, "Decoding optional data");
-    
-    // Lock mutex before accessing registers (shared resource with Modbus task)
-    if (!mb_registers_lock(portMAX_DELAY)) {
-        ESP_LOGE(TAG, "Failed to lock registers mutex");
-        return ESP_ERR_INVALID_STATE;
-    }
     
     // Optional PCB data decoding from g_protocol_rx.data[4]
     uint8_t opt_data = g_protocol_rx.data[OFFS_OPT_PCB_DATA];
@@ -578,9 +582,6 @@ esp_err_t decode_opt_data(void) {
     mb_input_registers[MB_INPUT_POOL_WATER_PUMP] = (int16_t)((opt_data >> 1) & 0x01);
     mb_input_registers[MB_INPUT_SOLAR_WATER_PUMP] = (int16_t)((opt_data >> 0) & 0x01);
     mb_input_registers[MB_INPUT_ALARM_STATE] = (int16_t)((opt_data >> 3) & 0x01);
-    
-    // Unlock mutex after all register writes complete
-    mb_registers_unlock();
     
     ESP_LOGD(TAG, "Optional data decoded successfully (written directly to Modbus registers)");
     return ESP_OK;
@@ -767,26 +768,16 @@ void log_main_data(void) {
     // Hours
     ESP_LOGI(TAG, "room_heater_operations_hours: %u", (uint16_t)mb_input_registers[MB_INPUT_ROOM_HEATER_OPS_HOURS]);
     ESP_LOGI(TAG, "dhw_heater_operations_hours: %u", (uint16_t)mb_input_registers[MB_INPUT_DHW_HEATER_OPS_HOURS]);
-    
-    // Strings - read from Modbus registers (2 bytes per register, big-endian)
+    ESP_LOGI(TAG, "error_type: '%c'", (char)mb_input_registers[MB_INPUT_ERROR_TYPE]);
+    ESP_LOGI(TAG, "error_number: %d", mb_input_registers[MB_INPUT_ERROR_NUMBER]);
+
     {
-        char error_state_str[16];
-        for (size_t i = 0; i < 8; i++) {
-            uint16_t reg = (uint16_t)mb_input_registers[MB_INPUT_ERROR_STATE_0 + i];
-            error_state_str[i * 2] = (char)((reg >> 8) & 0xFF);
-            error_state_str[i * 2 + 1] = (char)(reg & 0xFF);
-        }
-        error_state_str[15] = '\0';  // Ensure null-terminated
-        ESP_LOGI(TAG, "error_state: '%s'", error_state_str);
-    }
-    {
-        char model_str[32];
-        for (size_t i = 0; i < 16; i++) {
+        char model_str[30];
+        for (size_t i = 0; i < 5; i++) {
             uint16_t reg = (uint16_t)mb_input_registers[MB_INPUT_HP_MODEL_0 + i];
-            model_str[i * 2] = (char)((reg >> 8) & 0xFF);
-            model_str[i * 2 + 1] = (char)(reg & 0xFF);
+            sprintf(model_str + i * 6, "%02X %02X ", reg >> 8, reg & 0xFF);
         }
-        model_str[31] = '\0';  // Ensure null-terminated
+        model_str[29] = '\0';
         ESP_LOGI(TAG, "heat_pump_model: '%s'", model_str);
     }
     
