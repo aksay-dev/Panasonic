@@ -10,9 +10,11 @@
 #include "esp_modbus_slave.h"
 #include "esp_log.h"
 #include "driver/uart.h"
-#include "freertos/FreeRTOS.h"
+#include "driver/gpio.h"
 #include "freertos/task.h"
 #include <string.h>
+#include "nvs_flash.h"
+#include "nvs.h"
 
 static const char *TAG = "MODBUS_SLAVE";
 
@@ -22,7 +24,7 @@ static void *mbc_slave_handle = NULL;
 // Task handle
 static TaskHandle_t mb_task_handle = NULL;
 
-static modbus_serial_config_t current_serial_cfg = {
+static modbus_serial_config_t base_serial_cfg = {
     .baudrate = MB_DEV_SPEED,
     .parity = UART_PARITY_DISABLE,
     .stop_bits = UART_STOP_BITS_1,
@@ -37,6 +39,28 @@ static bool modbus_slave_validate_serial_config(const modbus_serial_config_t *cf
 static void modbus_slave_restore_previous_controller(const modbus_serial_config_t *prev_cfg,
                                                      bool restart_required,
                                                      bool had_controller);
+static esp_err_t modbus_serial_storage_init(void);
+static esp_err_t modbus_serial_load_from_nvs(modbus_serial_config_t *cfg);
+static esp_err_t modbus_serial_save_to_nvs(const modbus_serial_config_t *cfg);
+static void modbus_log_serial_config(const char *prefix, const modbus_serial_config_t *cfg);
+static void modbus_reset_button_init(void);
+static void modbus_reset_button_poll(void);
+static void modbus_apply_factory_defaults(void);
+
+static bool nvs_ready = false;
+static bool reset_button_ready = false;
+static TickType_t reset_press_start = 0;
+static bool reset_action_performed = false;
+
+#define MODBUS_NVS_NAMESPACE       "modbus"
+#define MODBUS_NVS_KEY_BAUD        "baud"
+#define MODBUS_NVS_KEY_PARITY      "parity"
+#define MODBUS_NVS_KEY_STOP_BITS   "stop"
+#define MODBUS_NVS_KEY_DATA_BITS   "data"
+#define MODBUS_NVS_KEY_SLAVE_ID    "slave"
+
+#define MODBUS_RESET_BUTTON_GPIO   GPIO_NUM_0
+#define MODBUS_RESET_HOLD_TICKS    pdMS_TO_TICKS(4000)
 
 static esp_err_t modbus_slave_setup_controller(void) {
     if (mbc_slave_handle != NULL) {
@@ -47,11 +71,11 @@ static esp_err_t modbus_slave_setup_controller(void) {
     mb_communication_info_t comm_config = {
         .ser_opts.port = MB_PORT_NUM,
         .ser_opts.mode = MB_RTU,
-        .ser_opts.baudrate = current_serial_cfg.baudrate,
-        .ser_opts.parity = current_serial_cfg.parity,
-        .ser_opts.uid = current_serial_cfg.slave_addr,
-        .ser_opts.data_bits = current_serial_cfg.data_bits,
-        .ser_opts.stop_bits = current_serial_cfg.stop_bits
+        .ser_opts.baudrate = base_serial_cfg.baudrate,
+        .ser_opts.parity = base_serial_cfg.parity,
+        .ser_opts.uid = base_serial_cfg.slave_addr,
+        .ser_opts.data_bits = base_serial_cfg.data_bits,
+        .ser_opts.stop_bits = base_serial_cfg.stop_bits
     };
 
     esp_err_t ret = mbc_slave_create_serial(&comm_config, &mbc_slave_handle);
@@ -99,13 +123,13 @@ static esp_err_t modbus_slave_setup_controller(void) {
     }
 
     ESP_LOGI(TAG, "UART1 configured: TX=GPIO%d, RX=GPIO%d, RTS=GPIO%d, Baud=%lu",
-             MB_UART_TXD, MB_UART_RXD, MB_UART_RTS, (unsigned long)current_serial_cfg.baudrate);
+             MB_UART_TXD, MB_UART_RXD, MB_UART_RTS, (unsigned long)base_serial_cfg.baudrate);
     ESP_LOGI(TAG, "RS485 Half-Duplex mode enabled");
     ESP_LOGI(TAG, "Slave address: %u, Data bits: %d, Stop bits: %d, Parity: %d",
-             current_serial_cfg.slave_addr,
-             current_serial_cfg.data_bits,
-             current_serial_cfg.stop_bits,
-             current_serial_cfg.parity);
+             base_serial_cfg.slave_addr,
+             base_serial_cfg.data_bits,
+             base_serial_cfg.stop_bits,
+             base_serial_cfg.parity);
     ESP_LOGI(TAG, "Input registers: 0x%04X-0x%04X (%d regs)",
              MB_REG_INPUT_START, MB_REG_INPUT_START + MB_REG_INPUT_COUNT - 1, MB_REG_INPUT_COUNT);
     ESP_LOGI(TAG, "Holding registers: 0x%04X-0x%04X (%d regs)",
@@ -163,7 +187,7 @@ static void modbus_slave_restore_previous_controller(const modbus_serial_config_
         return;
     }
 
-    current_serial_cfg = *prev_cfg;
+    base_serial_cfg = *prev_cfg;
     esp_err_t ret = modbus_slave_setup_controller();
     if (ret != ESP_OK) {
         ESP_LOGE(TAG, "Failed to restore previous Modbus controller: %s", esp_err_to_name(ret));
@@ -182,6 +206,193 @@ static void modbus_slave_restore_previous_controller(const modbus_serial_config_
     }
 }
 
+static void modbus_log_serial_config(const char *prefix, const modbus_serial_config_t *cfg) {
+    if (cfg == NULL) {
+        return;
+    }
+    ESP_LOGI(TAG, "%s Modbus cfg -> baud=%lu, parity=%d, data_bits=%d, stop_bits=%d, slave_id=%u",
+             prefix ? prefix : "Current",
+             (unsigned long)cfg->baudrate,
+             cfg->parity,
+             cfg->data_bits,
+             cfg->stop_bits,
+             cfg->slave_addr);
+}
+
+static esp_err_t modbus_serial_storage_init(void) {
+    if (nvs_ready) {
+        return ESP_OK;
+    }
+
+    esp_err_t err = nvs_flash_init();
+    if (err == ESP_ERR_NVS_NO_FREE_PAGES || err == ESP_ERR_NVS_NEW_VERSION_FOUND) {
+        ESP_LOGW(TAG, "NVS init failed (%s), erasing partition", esp_err_to_name(err));
+        esp_err_t erase_ret = nvs_flash_erase();
+        if (erase_ret != ESP_OK) {
+            ESP_LOGE(TAG, "Failed to erase NVS partition: %s", esp_err_to_name(erase_ret));
+            return erase_ret;
+        }
+        err = nvs_flash_init();
+    }
+
+    if (err != ESP_OK) {
+        ESP_LOGE(TAG, "Failed to initialize NVS flash: %s", esp_err_to_name(err));
+        return err;
+    }
+
+    nvs_ready = true;
+    return ESP_OK;
+}
+
+static esp_err_t modbus_serial_load_from_nvs(modbus_serial_config_t *cfg) {
+    if (cfg == NULL) {
+        return ESP_ERR_INVALID_ARG;
+    }
+
+    esp_err_t err = modbus_serial_storage_init();
+    if (err != ESP_OK) {
+        return err;
+    }
+
+    nvs_handle_t handle;
+    err = nvs_open(MODBUS_NVS_NAMESPACE, NVS_READONLY, &handle);
+    if (err != ESP_OK) {
+        return err;
+    }
+
+    uint32_t baud = 0;
+    uint32_t stop_bits = 0;
+    uint32_t data_bits = 0;
+    uint8_t parity = 0;
+    uint8_t slave_id = 0;
+
+    err = nvs_get_u32(handle, MODBUS_NVS_KEY_BAUD, &baud);
+    if (err != ESP_OK) goto load_exit;
+
+    err = nvs_get_u8(handle, MODBUS_NVS_KEY_PARITY, &parity);
+    if (err != ESP_OK) goto load_exit;
+
+    err = nvs_get_u32(handle, MODBUS_NVS_KEY_STOP_BITS, &stop_bits);
+    if (err != ESP_OK) goto load_exit;
+
+    err = nvs_get_u32(handle, MODBUS_NVS_KEY_DATA_BITS, &data_bits);
+    if (err != ESP_OK) goto load_exit;
+
+    err = nvs_get_u8(handle, MODBUS_NVS_KEY_SLAVE_ID, &slave_id);
+    if (err != ESP_OK) goto load_exit;
+
+    cfg->baudrate = baud;
+    cfg->parity = (uart_parity_t)parity;
+    cfg->stop_bits = (uart_stop_bits_t)stop_bits;
+    cfg->data_bits = (uart_word_length_t)data_bits;
+    cfg->slave_addr = slave_id;
+
+load_exit:
+    nvs_close(handle);
+    return err;
+}
+
+static esp_err_t modbus_serial_save_to_nvs(const modbus_serial_config_t *cfg) {
+    if (cfg == NULL) {
+        return ESP_ERR_INVALID_ARG;
+    }
+
+    esp_err_t err = modbus_serial_storage_init();
+    if (err != ESP_OK) {
+        return err;
+    }
+
+    nvs_handle_t handle;
+    err = nvs_open(MODBUS_NVS_NAMESPACE, NVS_READWRITE, &handle);
+    if (err != ESP_OK) {
+        ESP_LOGE(TAG, "Failed to open NVS namespace '%s': %s", MODBUS_NVS_NAMESPACE, esp_err_to_name(err));
+        return err;
+    }
+
+    err = nvs_set_u32(handle, MODBUS_NVS_KEY_BAUD, cfg->baudrate);
+    if (err != ESP_OK) goto save_exit;
+
+    err = nvs_set_u8(handle, MODBUS_NVS_KEY_PARITY, (uint8_t)cfg->parity);
+    if (err != ESP_OK) goto save_exit;
+
+    err = nvs_set_u32(handle, MODBUS_NVS_KEY_STOP_BITS, (uint32_t)cfg->stop_bits);
+    if (err != ESP_OK) goto save_exit;
+
+    err = nvs_set_u32(handle, MODBUS_NVS_KEY_DATA_BITS, (uint32_t)cfg->data_bits);
+    if (err != ESP_OK) goto save_exit;
+
+    err = nvs_set_u8(handle, MODBUS_NVS_KEY_SLAVE_ID, cfg->slave_addr);
+    if (err != ESP_OK) goto save_exit;
+
+    err = nvs_commit(handle);
+
+save_exit:
+    if (err != ESP_OK) {
+        ESP_LOGE(TAG, "Failed to persist Modbus config to NVS: %s", esp_err_to_name(err));
+    }
+    nvs_close(handle);
+    return err;
+}
+
+static void modbus_reset_button_init(void) {
+    gpio_config_t io_conf = {
+        .pin_bit_mask = 1ULL << MODBUS_RESET_BUTTON_GPIO,
+        .mode = GPIO_MODE_INPUT,
+        .pull_up_en = GPIO_PULLUP_ENABLE,
+        .pull_down_en = GPIO_PULLDOWN_DISABLE,
+        .intr_type = GPIO_INTR_DISABLE
+    };
+    esp_err_t err = gpio_config(&io_conf);
+    if (err == ESP_OK) {
+        reset_button_ready = true;
+        ESP_LOGI(TAG, "Factory reset button initialized on GPIO%d", MODBUS_RESET_BUTTON_GPIO);
+    } else {
+        reset_button_ready = false;
+        ESP_LOGE(TAG, "Failed to configure factory reset button: %s", esp_err_to_name(err));
+    }
+}
+
+static void modbus_apply_factory_defaults(void) {
+    modbus_serial_config_t default_cfg = {
+        .baudrate = MB_DEV_SPEED,
+        .parity = UART_PARITY_DISABLE,
+        .stop_bits = UART_STOP_BITS_1,
+        .data_bits = UART_DATA_8_BITS,
+        .slave_addr = MB_SLAVE_ADDR
+    };
+    ESP_LOGI(TAG, "Applying factory Modbus settings (9600 8N1, slave=%d)", MB_SLAVE_ADDR);
+    esp_err_t ret = modbus_slave_apply_serial_config(&default_cfg);
+    if (ret == ESP_OK) {
+        modbus_params_sync_serial_registers();
+        ESP_LOGI(TAG, "Factory Modbus settings applied successfully");
+    } else {
+        ESP_LOGE(TAG, "Failed to apply factory Modbus settings: %s", esp_err_to_name(ret));
+    }
+}
+
+static void modbus_reset_button_poll(void) {
+    if (!reset_button_ready) {
+        return;
+    }
+
+    int level = gpio_get_level(MODBUS_RESET_BUTTON_GPIO);
+    TickType_t now = xTaskGetTickCount();
+
+    if (level == 0) { // button pressed (active low)
+        if (reset_press_start == 0) {
+            reset_press_start = now;
+            reset_action_performed = false;
+        } else if (!reset_action_performed &&
+                   (now - reset_press_start) >= MODBUS_RESET_HOLD_TICKS) {
+            modbus_apply_factory_defaults();
+            reset_action_performed = true;
+        }
+    } else {
+        reset_press_start = 0;
+        reset_action_performed = false;
+    }
+}
+
 /**
  * @brief Modbus task - periodically update input registers and check events
  */
@@ -192,8 +403,10 @@ static void modbus_task(void *pvParameters) {
     ESP_LOGI(TAG, "Modbus task started");
     
     while (1) {
-        // Update input registers from heat pump data
+        // Update input registers from heat pump data and check reset button
         esp_err_t ret;
+        modbus_reset_button_poll();
+
         if (mbc_slave_handle == NULL) {
             vTaskDelay(pdMS_TO_TICKS(100));
             continue;
@@ -216,15 +429,29 @@ static void modbus_task(void *pvParameters) {
             // Get event info
             ret = mbc_slave_get_param_info(mbc_slave_handle, &reg_info, MB_PAR_INFO_TOUT);
             if (ret == ESP_OK) {
-                ESP_LOGI(TAG, "Write to address: 0x%04X, size: %d", 
-                         reg_info.mb_offset, reg_info.size);
+                int32_t start_index = 0;
+                if (reg_info.address != NULL) {
+                    start_index = (int32_t)(((int16_t *)reg_info.address) - mb_holding_registers);
+                }
+                uint16_t base_addr = 0;
+                bool addr_valid = false;
+                if (start_index >= 0 && start_index < MB_REG_HOLDING_COUNT) {
+                    base_addr = MB_REG_HOLDING_START + (uint16_t)start_index;
+                    addr_valid = true;
+                    ESP_LOGI(TAG, "Write to address: 0x%04X, size: %d",
+                             base_addr, reg_info.size);
+                } else {
+                    ESP_LOGW(TAG, "Holding write outside mapped area (offset=%u)", reg_info.mb_offset);
+                }
                 
-                // Process the write - iterate through written registers
-                for (uint16_t i = 0; i < reg_info.size; i++) {
-                    uint16_t reg_addr = reg_info.mb_offset + i;
-                    if (reg_addr >= MB_REG_HOLDING_START && 
-                        reg_addr < MB_REG_HOLDING_START + MB_REG_HOLDING_COUNT) {
-                        modbus_params_process_holding_write(reg_addr);
+                if (addr_valid) {
+                    // Process the write - iterate through written registers
+                    for (uint16_t i = 0; i < reg_info.size; i++) {
+                        uint16_t reg_addr = base_addr + i;
+                        if (reg_addr >= MB_REG_HOLDING_START &&
+                            reg_addr < MB_REG_HOLDING_START + MB_REG_HOLDING_COUNT) {
+                            modbus_params_process_holding_write(reg_addr);
+                        }
                     }
                 }
             }
@@ -259,6 +486,21 @@ esp_err_t modbus_slave_init(void) {
     esp_err_t ret;
     
     ESP_LOGI(TAG, "Initializing Modbus RTU slave");
+
+    modbus_serial_config_t stored_cfg;
+    esp_err_t load_ret = modbus_serial_load_from_nvs(&stored_cfg);
+    if (load_ret == ESP_OK) {
+        if (modbus_slave_validate_serial_config(&stored_cfg)) {
+            base_serial_cfg = stored_cfg;
+            modbus_log_serial_config("Loaded NVS", &base_serial_cfg);
+        } else {
+            ESP_LOGW(TAG, "Stored Modbus config invalid, reverting to defaults");
+        }
+    } else if (load_ret == ESP_ERR_NVS_NOT_FOUND) {
+        ESP_LOGI(TAG, "No Modbus config stored in NVS, using defaults");
+    } else {
+        ESP_LOGW(TAG, "Failed to load Modbus config from NVS: %s", esp_err_to_name(load_ret));
+    }
     
     // Initialize Modbus parameters
     ret = modbus_params_init();
@@ -272,6 +514,8 @@ esp_err_t modbus_slave_init(void) {
         ESP_LOGE(TAG, "Failed to create Modbus controller: %s", esp_err_to_name(ret));
         return ret;
     }
+
+    modbus_reset_button_init();
     
     ESP_LOGI(TAG, "Modbus RTU slave initialized successfully");
     return ESP_OK;
@@ -325,7 +569,7 @@ esp_err_t modbus_slave_apply_serial_config(const modbus_serial_config_t *cfg) {
 
     bool controller_exists = (mbc_slave_handle != NULL);
     bool restart_required = modbus_slave_running;
-    modbus_serial_config_t previous_cfg = current_serial_cfg;
+    modbus_serial_config_t previous_cfg = base_serial_cfg;
 
     if (controller_exists) {
         if (restart_required) {
@@ -344,12 +588,12 @@ esp_err_t modbus_slave_apply_serial_config(const modbus_serial_config_t *cfg) {
         mbc_slave_handle = NULL;
     }
 
-    current_serial_cfg = *cfg;
+    base_serial_cfg = *cfg;
 
     esp_err_t ret = modbus_slave_setup_controller();
     if (ret != ESP_OK) {
         ESP_LOGE(TAG, "Failed to setup controller with new config: %s", esp_err_to_name(ret));
-        current_serial_cfg = previous_cfg;
+        base_serial_cfg = previous_cfg;
         modbus_slave_restore_previous_controller(&previous_cfg, restart_required, controller_exists);
         return ret;
     }
@@ -361,18 +605,36 @@ esp_err_t modbus_slave_apply_serial_config(const modbus_serial_config_t *cfg) {
             (void)mbc_slave_delete(mbc_slave_handle);
             mbc_slave_handle = NULL;
             modbus_slave_restore_previous_controller(&previous_cfg, true, controller_exists);
-            current_serial_cfg = previous_cfg;
+            base_serial_cfg = previous_cfg;
             return ret;
         }
         modbus_slave_running = true;
     }
 
     ESP_LOGI(TAG, "Applied Modbus config: baud=%lu, parity=%d, data_bits=%d, stop_bits=%d, slave_id=%u",
-             (unsigned long)current_serial_cfg.baudrate,
-             current_serial_cfg.parity,
-             current_serial_cfg.data_bits,
-             current_serial_cfg.stop_bits,
-             current_serial_cfg.slave_addr);
+             (unsigned long)base_serial_cfg.baudrate,
+             base_serial_cfg.parity,
+             base_serial_cfg.data_bits,
+             base_serial_cfg.stop_bits,
+             base_serial_cfg.slave_addr);
+
+    esp_err_t store_ret = modbus_serial_save_to_nvs(&base_serial_cfg);
+    if (store_ret != ESP_OK) {
+        ESP_LOGE(TAG, "Reverting config due to NVS save failure");
+        if (modbus_slave_running) {
+            (void)mbc_slave_stop(mbc_slave_handle);
+            modbus_slave_running = false;
+        }
+        if (mbc_slave_handle != NULL) {
+            (void)mbc_slave_delete(mbc_slave_handle);
+            mbc_slave_handle = NULL;
+        }
+        base_serial_cfg = previous_cfg;
+        modbus_slave_restore_previous_controller(&previous_cfg, restart_required, controller_exists);
+        return store_ret;
+    }
+
+    modbus_log_serial_config("Stored", &base_serial_cfg);
 
     return ESP_OK;
 }
@@ -381,6 +643,6 @@ esp_err_t modbus_slave_get_serial_config(modbus_serial_config_t *cfg_out) {
     if (cfg_out == NULL) {
         return ESP_ERR_INVALID_ARG;
     }
-    *cfg_out = current_serial_cfg;
+    *cfg_out = base_serial_cfg;
     return ESP_OK;
 }

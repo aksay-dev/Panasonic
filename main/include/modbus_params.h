@@ -11,8 +11,6 @@
 #include <stdint.h>
 #include <stdbool.h>
 #include "esp_err.h"
-#include "freertos/FreeRTOS.h"
-#include "freertos/task.h"
 
 #ifdef __cplusplus
 extern "C" {
@@ -444,6 +442,11 @@ esp_err_t modbus_params_init(void);
  * @return ESP_OK on success
  */
 esp_err_t modbus_params_process_holding_write(uint16_t reg_addr);
+
+/**
+ * @brief Sync holding registers with current serial configuration
+ */
+void modbus_params_sync_serial_registers(void);
 
 #ifdef __cplusplus
 }

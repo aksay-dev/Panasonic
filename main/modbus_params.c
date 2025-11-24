@@ -9,8 +9,6 @@
 #include "include/commands.h"
 #include "include/modbus_slave.h"
 #include "esp_log.h"
-#include "freertos/FreeRTOS.h"
-#include "freertos/semphr.h"
 #include <string.h>
 
 static const char *TAG = "MODBUS_PARAMS";
@@ -28,7 +26,8 @@ enum {
     IDX_MODBUS_PARITY = HOLDING_INDEX(MB_HOLDING_SET_MODBUS_PARITY),
     IDX_MODBUS_STOP_BITS = HOLDING_INDEX(MB_HOLDING_SET_MODBUS_STOP_BITS),
     IDX_MODBUS_DATA_BITS = HOLDING_INDEX(MB_HOLDING_SET_MODBUS_DATA_BITS),
-    IDX_MODBUS_SLAVE_ID = HOLDING_INDEX(MB_HOLDING_SET_MODBUS_SLAVE_ID)
+    IDX_MODBUS_SLAVE_ID = HOLDING_INDEX(MB_HOLDING_SET_MODBUS_SLAVE_ID),
+    IDX_MODBUS_APPLY_MODBUS_SETTINGS = HOLDING_INDEX(MB_HOLDING_APPLY_MODBUS_SETTINGS)
 };
 
 static bool modbus_is_supported_baud(uint32_t baud);
@@ -40,7 +39,7 @@ static bool modbus_decode_data_bits(uint16_t code, uart_word_length_t *data_bits
 static int16_t modbus_encode_data_bits(uart_word_length_t data_bits);
 static bool modbus_is_valid_slave_id(uint32_t value);
 static void modbus_restore_serial_field(uint16_t reg_addr);
-static void modbus_sync_serial_registers(void);
+void modbus_params_sync_serial_registers(void);
 static esp_err_t modbus_build_serial_config_from_registers(modbus_serial_config_t *cfg);
 
 static bool modbus_is_supported_baud(uint32_t baud) {
@@ -149,7 +148,7 @@ static void modbus_restore_serial_field(uint16_t reg_addr) {
     }
 }
 
-static void modbus_sync_serial_registers(void) {
+void modbus_params_sync_serial_registers(void) {
     modbus_serial_config_t cfg;
     if (modbus_slave_get_serial_config(&cfg) != ESP_OK) {
         return;
@@ -160,6 +159,7 @@ static void modbus_sync_serial_registers(void) {
     mb_holding_registers[IDX_MODBUS_STOP_BITS] = modbus_encode_stop_bits(cfg.stop_bits);
     mb_holding_registers[IDX_MODBUS_DATA_BITS] = modbus_encode_data_bits(cfg.data_bits);
     mb_holding_registers[IDX_MODBUS_SLAVE_ID] = (int16_t)cfg.slave_addr;
+    mb_holding_registers[IDX_MODBUS_APPLY_MODBUS_SETTINGS] = 0;
 }
 
 static esp_err_t modbus_build_serial_config_from_registers(modbus_serial_config_t *cfg) {
@@ -216,7 +216,7 @@ esp_err_t modbus_params_init(void) {
     memset(mb_input_registers, 0, sizeof(mb_input_registers));
     memset(mb_holding_registers, 0, sizeof(mb_holding_registers));
 
-    modbus_sync_serial_registers();
+    modbus_params_sync_serial_registers();
     
     ESP_LOGI(TAG, "Modbus parameters initialized: %d input, %d holding registers",
              MB_REG_INPUT_COUNT, MB_REG_HOLDING_COUNT);
@@ -469,8 +469,7 @@ esp_err_t modbus_params_process_holding_write(uint16_t reg_addr) {
         case MB_HOLDING_SET_MODBUS_BAUD: {
             uint32_t baud = (uint16_t)mb_holding_registers[IDX_MODBUS_BAUD];
             if (!modbus_is_supported_baud(baud)) {
-                ESP_LOGW(TAG, "Invalid Modbus baud rate request: %lu (1200-57600)",
-                         (unsigned long)baud);
+                ESP_LOGW(TAG, "Invalid Modbus baud rate request: %lu (1200-57600)", baud);
                 modbus_restore_serial_field(MB_HOLDING_SET_MODBUS_BAUD);
                 ret = ESP_ERR_INVALID_ARG;
             }
@@ -533,7 +532,7 @@ esp_err_t modbus_params_process_holding_write(uint16_t reg_addr) {
             }
             ret = modbus_slave_apply_serial_config(&new_cfg);
             if (ret == ESP_OK) {
-                modbus_sync_serial_registers();
+                modbus_params_sync_serial_registers();
             }
             break;
         }

@@ -11,7 +11,7 @@
 #include <stdint.h>
 #include <stdbool.h>
 #include "esp_err.h"
-#include "driver/uart.h"
+#include "hal/uart_types.h"
 
 // Modbus communication parameters (defaults)
 #define MB_PORT_NUM         UART_NUM_1    // UART1
@@ -44,13 +44,6 @@ esp_err_t modbus_slave_init(void);
  * @return ESP_OK on success
  */
 esp_err_t modbus_slave_start(void);
-
-/**
- * @brief Update input registers from heat pump decoded data
- * Should be called periodically to sync Modbus registers with heat pump state
- * @return ESP_OK on success
- */
-esp_err_t modbus_update_input_registers(void);
 
 /**
  * @brief Apply a new Modbus serial configuration (baud rate, frame, slave ID)
