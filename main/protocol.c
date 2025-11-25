@@ -7,10 +7,12 @@
 
 #include "protocol.h"
 #include "decoder.h"
+#include "modbus_params.h"
 #include "esp_log.h"
 #include "driver/uart.h"
 #include "freertos/task.h"
 #include "freertos/queue.h"
+#include "include/hpc.h"
 #include "string.h"
 #include "stdlib.h"
 
@@ -98,7 +100,6 @@ static esp_err_t protocol_uart_send(const uint8_t *data, size_t size) {
         return ESP_FAIL;
     }
     
-    ESP_LOGD(TAG, "Sent %d bytes + checksum 0x%02X", size, checksum);
     return ESP_OK;
 }
 
@@ -113,7 +114,7 @@ static int protocol_uart_receive(uint8_t *data, size_t max_size) {
     return uart_read_bytes(PROTOCOL_UART_NUM, data, max_size, pdMS_TO_TICKS(PROTOCOL_READ_TIMEOUT_MS));
 }
 
-// Вспомогательная функция минидампа массива uint8_t длиной 256 байт (16 строк по 16 байт)
+// Вспомогательная функция мини дампа массива uint8_t длиной 256 байт (16 строк по 16 байт)
 static void mini_dump(const uint8_t *data) {
     for (int row = 0; row < 16; row++) {
         int offset = row * 16;
@@ -176,12 +177,15 @@ static esp_err_t protocol_process_received_data(const uint8_t *data, size_t size
             if ((data[0] == PROTOCOL_PKT_READ) && (data[0xC7] >= 3)) g_protocol_ctx.extra_data_block_available = true;
         }
       
+        // Reset extended data flag when main data is received
+        mb_input_registers[MB_INPUT_EXTENDED_DATA] = 0;
+      
         // Decode main data
         esp_err_t decode_ret = decode_main_data();
         if (decode_ret == ESP_OK) {
             ESP_LOGI(TAG, "Main data decoded successfully");
             // Log main data
-            log_main_data();
+            // log_main_data();
         } else {
             ESP_LOGE(TAG, "Failed to decode main data: %s", esp_err_to_name(decode_ret));
         }
@@ -189,12 +193,15 @@ static esp_err_t protocol_process_received_data(const uint8_t *data, size_t size
     } else if (size == PROTOCOL_EXTRA_DATA_SIZE && data[3] == PROTOCOL_DATA_EXTRA) {
         ESP_LOGI(TAG, "Received extra data block");
         
+        // Set extended data flag when extra data is received
+        mb_input_registers[MB_INPUT_EXTENDED_DATA] = 1;
+        
         // Decode extra data
         esp_err_t decode_ret = decode_extra_data();
         if (decode_ret == ESP_OK) {
             ESP_LOGI(TAG, "Extra data decoded successfully");
             // Log extra data
-            log_extra_data();
+            // log_extra_data();
         } else {
             ESP_LOGE(TAG, "Failed to decode extra data: %s", esp_err_to_name(decode_ret));
         }
@@ -207,7 +214,7 @@ static esp_err_t protocol_process_received_data(const uint8_t *data, size_t size
         if (decode_ret == ESP_OK) {
             ESP_LOGI(TAG, "Optional data decoded successfully");
             // Log optional data
-            log_opt_data();
+            // log_opt_data();
         } else {
             ESP_LOGE(TAG, "Failed to decode optional data: %s", esp_err_to_name(decode_ret));
         }
@@ -273,13 +280,17 @@ void protocol_task(void *pvParameters) {
             // Send periodic queries
             protocol_request_main_data();
             if(g_protocol_ctx.extra_data_block_available) protocol_request_extra_data();
-            if(g_protocol_ctx.opt_data_block_available) protocol_request_opt_data();
+            // Check OPT_PCB_AVAILABLE from holding register
+            if(mb_holding_registers[MB_HOLDING_OPT_PCB_AVAILABLE - MB_REG_HOLDING_START] != 0) {
+                protocol_request_opt_data();
+            }
         }
 
         vTaskDelay(pdMS_TO_TICKS(10)); // Small delay to prevent busy waiting
     }
 
     ESP_LOGE(TAG, "Protocol task stopped");
+    app_restart();
 }
 
 /**
@@ -337,8 +348,6 @@ esp_err_t protocol_init(void) {
         ESP_LOGE(TAG, "Failed to create command queue");
         return ESP_ERR_NO_MEM;
     }
-
-    g_protocol_ctx.opt_data_block_available = PROTOCOL_OPT_AVAILABLE;
 
     ESP_LOGI(TAG, "Heat pump protocol initialized successfully");
     return ESP_OK;

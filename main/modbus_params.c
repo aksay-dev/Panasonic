@@ -8,6 +8,7 @@
 #include "include/modbus_params.h"
 #include "include/commands.h"
 #include "include/modbus_slave.h"
+#include "include/nvs_hp.h"
 #include "esp_log.h"
 #include <string.h>
 
@@ -27,7 +28,8 @@ enum {
     IDX_MODBUS_STOP_BITS = HOLDING_INDEX(MB_HOLDING_SET_MODBUS_STOP_BITS),
     IDX_MODBUS_DATA_BITS = HOLDING_INDEX(MB_HOLDING_SET_MODBUS_DATA_BITS),
     IDX_MODBUS_SLAVE_ID = HOLDING_INDEX(MB_HOLDING_SET_MODBUS_SLAVE_ID),
-    IDX_MODBUS_APPLY_MODBUS_SETTINGS = HOLDING_INDEX(MB_HOLDING_APPLY_MODBUS_SETTINGS)
+    IDX_MODBUS_APPLY_MODBUS_SETTINGS = HOLDING_INDEX(MB_HOLDING_APPLY_MODBUS_SETTINGS),
+    IDX_MODBUS_OPT_PCB = HOLDING_INDEX(MB_HOLDING_OPT_PCB_AVAILABLE)
 };
 
 static bool modbus_is_supported_baud(uint32_t baud);
@@ -533,6 +535,22 @@ esp_err_t modbus_params_process_holding_write(uint16_t reg_addr) {
             ret = modbus_slave_apply_serial_config(&new_cfg);
             if (ret == ESP_OK) {
                 modbus_params_sync_serial_registers();
+            }
+            break;
+        }
+
+        case MB_HOLDING_OPT_PCB_AVAILABLE: {
+            // Store value (0 or 1) - protocol.c will read it
+            if (value != 0 && value != 1) {
+                ESP_LOGW(TAG, "Invalid OPT_PCB_AVAILABLE value: %d (must be 0 or 1)", value);
+                ret = ESP_ERR_INVALID_ARG;
+            } else {
+                ESP_LOGI(TAG, "OPT_PCB_AVAILABLE set to %d", value);
+                esp_err_t save_ret = modbus_nvs_save_opt_pcb((uint8_t)value);
+                if (save_ret != ESP_OK) {
+                    ESP_LOGE(TAG, "Failed to save OPT_PCB flag to NVS: %s", esp_err_to_name(save_ret));
+                    ret = save_ret;
+                }
             }
             break;
         }

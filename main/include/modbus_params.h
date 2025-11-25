@@ -23,222 +23,223 @@ extern "C" {
 
 // System information (0x0000-0x000F)
 #define MB_INPUT_STATUS             0x0003
+#define MB_INPUT_EXTENDED_DATA      0x0004  // Если 1, то данные расширенные
 
 // ============================================================================
 // Basic temperatures (0x0010-0x002F)
 // ============================================================================
 // int16_t types (stored as * 100)
-#define MB_INPUT_MAIN_INLET_TEMP       0x0010  // TOP5, int16
-#define MB_INPUT_MAIN_OUTLET_TEMP      0x0011  // TOP6, int16
+#define MB_INPUT_MAIN_INLET_TEMP       0x0010
+#define MB_INPUT_MAIN_OUTLET_TEMP      0x0011
 
 // int8_t types (stored as whole degrees)
-#define MB_INPUT_MAIN_TARGET_TEMP      0x0012  // TOP7, int8
-#define MB_INPUT_DHW_TEMP              0x0013  // TOP10, int8
-#define MB_INPUT_DHW_TARGET_TEMP       0x0014  // TOP9, int8
-#define MB_INPUT_OUTSIDE_TEMP          0x0015  // TOP14, int8
-#define MB_INPUT_ROOM_THERMOSTAT_TEMP  0x0016  // TOP33, int8
-#define MB_INPUT_BUFFER_TEMP           0x0017  // TOP46, int8
-#define MB_INPUT_SOLAR_TEMP            0x0018  // TOP47, int8
-#define MB_INPUT_POOL_TEMP             0x0019  // TOP48, int8
+#define MB_INPUT_MAIN_TARGET_TEMP      0x0012
+#define MB_INPUT_DHW_TEMP              0x0013
+#define MB_INPUT_DHW_TARGET_TEMP       0x0014
+#define MB_INPUT_OUTSIDE_TEMP          0x0015
+#define MB_INPUT_ROOM_THERMOSTAT_TEMP  0x0016
+#define MB_INPUT_BUFFER_TEMP           0x0017
+#define MB_INPUT_SOLAR_TEMP            0x0018
+#define MB_INPUT_POOL_TEMP             0x0019
 
 // Additional temperatures (0x0020-0x003F)
-#define MB_INPUT_MAIN_HEX_OUTLET_TEMP  0x0020  // TOP49, int8 (condensor)
-#define MB_INPUT_DISCHARGE_TEMP        0x0021  // TOP50, int8 (compressor)
-#define MB_INPUT_INSIDE_PIPE_TEMP      0x0022  // TOP51, int8
-#define MB_INPUT_DEFROST_TEMP          0x0023  // TOP52, int8
-#define MB_INPUT_EVA_OUTLET_TEMP       0x0024  // TOP53, int8 (evaporator)
-#define MB_INPUT_BYPASS_OUTLET_TEMP    0x0025  // TOP54, int8
-#define MB_INPUT_IPM_TEMP              0x0026  // TOP55, int8 (inverter)
-#define MB_INPUT_OUTSIDE_PIPE_TEMP     0x0027  // TOP21, int8 (outdoor coil)
-#define MB_INPUT_Z1_ROOM_TEMP          0x0028  // TOP56, int8
-#define MB_INPUT_Z2_ROOM_TEMP          0x0029  // TOP57, int8
-#define MB_INPUT_Z1_WATER_TEMP         0x002A  // TOP36, int8
-#define MB_INPUT_Z2_WATER_TEMP         0x002B  // TOP37, int8
-#define MB_INPUT_Z1_WATER_TARGET_TEMP  0x002C  // TOP42, int8
-#define MB_INPUT_Z2_WATER_TARGET_TEMP  0x002D  // TOP43, int8
-#define MB_INPUT_SECOND_INLET_TEMP     0x002E  // TOP116, int8
-#define MB_INPUT_ECONOMIZER_OUTLET_TEMP 0x002F // TOP117, int8
-#define MB_INPUT_SECOND_ROOM_THERMO_TEMP 0x0030 // TOP118, int8
+#define MB_INPUT_MAIN_HEX_OUTLET_TEMP  0x0020
+#define MB_INPUT_DISCHARGE_TEMP        0x0021
+#define MB_INPUT_INSIDE_PIPE_TEMP      0x0022
+#define MB_INPUT_DEFROST_TEMP          0x0023
+#define MB_INPUT_EVA_OUTLET_TEMP       0x0024
+#define MB_INPUT_BYPASS_OUTLET_TEMP    0x0025
+#define MB_INPUT_IPM_TEMP              0x0026
+#define MB_INPUT_OUTSIDE_PIPE_TEMP     0x0027
+#define MB_INPUT_Z1_ROOM_TEMP          0x0028
+#define MB_INPUT_Z2_ROOM_TEMP          0x0029
+#define MB_INPUT_Z1_WATER_TEMP         0x002A
+#define MB_INPUT_Z2_WATER_TEMP         0x002B
+#define MB_INPUT_Z1_WATER_TARGET_TEMP  0x002C
+#define MB_INPUT_Z2_WATER_TARGET_TEMP  0x002D
+#define MB_INPUT_SECOND_INLET_TEMP     0x002E
+#define MB_INPUT_ECONOMIZER_OUTLET_TEMP 0x002F
+#define MB_INPUT_SECOND_ROOM_THERMO_TEMP 0x0030
 
 // ============================================================================
 // Zone temperature requests (0x0040-0x004F)
 // ============================================================================
-#define MB_INPUT_Z1_HEAT_REQUEST_TEMP  0x0040  // TOP27, int8
-#define MB_INPUT_Z1_COOL_REQUEST_TEMP  0x0041  // TOP28, int8
-#define MB_INPUT_Z2_HEAT_REQUEST_TEMP  0x0042  // TOP34, int8
-#define MB_INPUT_Z2_COOL_REQUEST_TEMP  0x0043  // TOP35, int8
+#define MB_INPUT_Z1_HEAT_REQUEST_TEMP  0x0040
+#define MB_INPUT_Z1_COOL_REQUEST_TEMP  0x0041
+#define MB_INPUT_Z2_HEAT_REQUEST_TEMP  0x0042
+#define MB_INPUT_Z2_COOL_REQUEST_TEMP  0x0043
 
 // ============================================================================
 // Zone 1 heating curve (0x0050-0x005F)
 // ============================================================================
-#define MB_INPUT_Z1_HEAT_CURVE_TARGET_HIGH  0x0050  // TOP29, int8
-#define MB_INPUT_Z1_HEAT_CURVE_TARGET_LOW   0x0051  // TOP30, int8
-#define MB_INPUT_Z1_HEAT_CURVE_OUTSIDE_HIGH 0x0052  // TOP31, int8
-#define MB_INPUT_Z1_HEAT_CURVE_OUTSIDE_LOW  0x0053  // TOP32, int8
+#define MB_INPUT_Z1_HEAT_CURVE_TARGET_HIGH  0x0050
+#define MB_INPUT_Z1_HEAT_CURVE_TARGET_LOW   0x0051
+#define MB_INPUT_Z1_HEAT_CURVE_OUTSIDE_HIGH 0x0052
+#define MB_INPUT_Z1_HEAT_CURVE_OUTSIDE_LOW  0x0053
 
 // Zone 1 cooling curve (0x0054-0x005F)
-#define MB_INPUT_Z1_COOL_CURVE_TARGET_HIGH  0x0054  // TOP72, int8
-#define MB_INPUT_Z1_COOL_CURVE_TARGET_LOW   0x0055  // TOP73, int8
-#define MB_INPUT_Z1_COOL_CURVE_OUTSIDE_HIGH 0x0056  // TOP74, int8
-#define MB_INPUT_Z1_COOL_CURVE_OUTSIDE_LOW  0x0057  // TOP75, int8
+#define MB_INPUT_Z1_COOL_CURVE_TARGET_HIGH  0x0054
+#define MB_INPUT_Z1_COOL_CURVE_TARGET_LOW   0x0055
+#define MB_INPUT_Z1_COOL_CURVE_OUTSIDE_HIGH 0x0056
+#define MB_INPUT_Z1_COOL_CURVE_OUTSIDE_LOW  0x0057
 
 // ============================================================================
 // Zone 2 heating curve (0x0060-0x006F)
 // ============================================================================
-#define MB_INPUT_Z2_HEAT_CURVE_TARGET_HIGH  0x0060  // TOP82, int8
-#define MB_INPUT_Z2_HEAT_CURVE_TARGET_LOW   0x0061  // TOP83, int8
-#define MB_INPUT_Z2_HEAT_CURVE_OUTSIDE_HIGH 0x0062  // TOP84, int8
-#define MB_INPUT_Z2_HEAT_CURVE_OUTSIDE_LOW  0x0063  // TOP85, int8
+#define MB_INPUT_Z2_HEAT_CURVE_TARGET_HIGH  0x0060
+#define MB_INPUT_Z2_HEAT_CURVE_TARGET_LOW   0x0061
+#define MB_INPUT_Z2_HEAT_CURVE_OUTSIDE_HIGH 0x0062
+#define MB_INPUT_Z2_HEAT_CURVE_OUTSIDE_LOW  0x0063
 
 // Zone 2 cooling curve (0x0064-0x006F)
-#define MB_INPUT_Z2_COOL_CURVE_TARGET_HIGH  0x0064  // TOP86, int8
-#define MB_INPUT_Z2_COOL_CURVE_TARGET_LOW   0x0065  // TOP87, int8
-#define MB_INPUT_Z2_COOL_CURVE_OUTSIDE_HIGH 0x0066  // TOP88, int8
-#define MB_INPUT_Z2_COOL_CURVE_OUTSIDE_LOW  0x0067  // TOP89, int8
+#define MB_INPUT_Z2_COOL_CURVE_TARGET_HIGH  0x0064
+#define MB_INPUT_Z2_COOL_CURVE_TARGET_LOW   0x0065
+#define MB_INPUT_Z2_COOL_CURVE_OUTSIDE_HIGH 0x0066
+#define MB_INPUT_Z2_COOL_CURVE_OUTSIDE_LOW  0x0067
 
 // ============================================================================
 // Power and energy (0x0070-0x007F)
 // ============================================================================
-#define MB_INPUT_HEAT_POWER_PRODUCTION   0x0070  // TOP15, uint16
-#define MB_INPUT_HEAT_POWER_CONSUMPTION  0x0071  // TOP16, uint16
-#define MB_INPUT_COOL_POWER_PRODUCTION   0x0072  // TOP38, uint16
-#define MB_INPUT_COOL_POWER_CONSUMPTION  0x0073  // TOP39, uint16
-#define MB_INPUT_DHW_POWER_PRODUCTION    0x0074  // TOP40, uint16
-#define MB_INPUT_DHW_POWER_CONSUMPTION   0x0075  // TOP41, uint16
+#define MB_INPUT_HEAT_POWER_PRODUCTION   0x0070
+#define MB_INPUT_HEAT_POWER_CONSUMPTION  0x0071
+#define MB_INPUT_COOL_POWER_PRODUCTION   0x0072
+#define MB_INPUT_COOL_POWER_CONSUMPTION  0x0073
+#define MB_INPUT_DHW_POWER_PRODUCTION    0x0074
+#define MB_INPUT_DHW_POWER_CONSUMPTION   0x0075
 
 // Extra power data (XTOP0-5)
-#define MB_INPUT_HEAT_POWER_CONSUMPTION_EXTRA 0x0076  // XTOP0, uint16
-#define MB_INPUT_COOL_POWER_CONSUMPTION_EXTRA 0x0077  // XTOP1, uint16
-#define MB_INPUT_DHW_POWER_CONSUMPTION_EXTRA  0x0078  // XTOP2, uint16
-#define MB_INPUT_HEAT_POWER_PRODUCTION_EXTRA  0x0079  // XTOP3, uint16
-#define MB_INPUT_COOL_POWER_PRODUCTION_EXTRA  0x007A  // XTOP4, uint16
-#define MB_INPUT_DHW_POWER_PRODUCTION_EXTRA   0x007B  // XTOP5, uint16
+#define MB_INPUT_HEAT_POWER_CONSUMPTION_EXTRA 0x0076
+#define MB_INPUT_COOL_POWER_CONSUMPTION_EXTRA 0x0077
+#define MB_INPUT_DHW_POWER_CONSUMPTION_EXTRA  0x0078
+#define MB_INPUT_HEAT_POWER_PRODUCTION_EXTRA  0x0079
+#define MB_INPUT_COOL_POWER_PRODUCTION_EXTRA  0x007A
+#define MB_INPUT_DHW_POWER_PRODUCTION_EXTRA   0x007B
 
 // ============================================================================
 // Technical parameters (0x0080-0x009F)
 // ============================================================================
-#define MB_INPUT_COMPRESSOR_FREQ       0x0080  // TOP8, uint16
-#define MB_INPUT_PUMP_FLOW             0x0081  // TOP1, int16 (*100)
-#define MB_INPUT_OPERATIONS_HOURS      0x0082  // TOP11, uint16
-#define MB_INPUT_OPERATIONS_COUNTER    0x0083  // TOP12, uint16
-#define MB_INPUT_FAN1_MOTOR_SPEED      0x0084  // TOP62, uint16
-#define MB_INPUT_FAN2_MOTOR_SPEED      0x0085  // TOP63, uint16
-#define MB_INPUT_HIGH_PRESSURE         0x0086  // TOP64, int16 (*100)
-#define MB_INPUT_PUMP_SPEED            0x0087  // TOP65, uint16
-#define MB_INPUT_LOW_PRESSURE          0x0088  // TOP66, int16 (*100)
-#define MB_INPUT_COMPRESSOR_CURRENT    0x0089  // TOP67, int16 (*100)
-#define MB_INPUT_PUMP_DUTY             0x008A  // TOP93, uint8
-#define MB_INPUT_MAX_PUMP_DUTY         0x008B  // TOP95, uint8
+#define MB_INPUT_COMPRESSOR_FREQ       0x0080
+#define MB_INPUT_PUMP_FLOW             0x0081
+#define MB_INPUT_OPERATIONS_HOURS      0x0082
+#define MB_INPUT_OPERATIONS_COUNTER    0x0083
+#define MB_INPUT_FAN1_MOTOR_SPEED      0x0084
+#define MB_INPUT_FAN2_MOTOR_SPEED      0x0085
+#define MB_INPUT_HIGH_PRESSURE         0x0086
+#define MB_INPUT_PUMP_SPEED            0x0087
+#define MB_INPUT_LOW_PRESSURE          0x0088
+#define MB_INPUT_COMPRESSOR_CURRENT    0x0089
+#define MB_INPUT_PUMP_DUTY             0x008A
+#define MB_INPUT_MAX_PUMP_DUTY         0x008B
 
 // ============================================================================
 // Operation states (0x00A0-0x00AF)
 // ============================================================================
-#define MB_INPUT_HEATPUMP_STATE        0x00A0  // TOP0, uint8
-#define MB_INPUT_FORCE_DHW_STATE       0x00A1  // TOP2, uint8
-#define MB_INPUT_OPERATING_MODE_STATE  0x00A2  // TOP4, uint8
-#define MB_INPUT_QUIET_MODE_SCHEDULE   0x00A3  // TOP3, uint8
-#define MB_INPUT_POWERFUL_MODE_TIME    0x00A4  // TOP17, uint8
-#define MB_INPUT_QUIET_MODE_LEVEL      0x00A5  // TOP18, uint8
-#define MB_INPUT_HOLIDAY_MODE_STATE    0x00A6  // TOP19, uint8
-#define MB_INPUT_THREE_WAY_VALVE_STATE 0x00A7  // TOP20, uint8
-#define MB_INPUT_DEFROSTING_STATE      0x00A8  // TOP26, uint8
-#define MB_INPUT_MAIN_SCHEDULE_STATE   0x00A9  // TOP13, uint8
-#define MB_INPUT_ZONES_STATE           0x00AA  // TOP94, uint8
+#define MB_INPUT_HEATPUMP_STATE        0x00A0
+#define MB_INPUT_FORCE_DHW_STATE       0x00A1
+#define MB_INPUT_OPERATING_MODE_STATE  0x00A2
+#define MB_INPUT_QUIET_MODE_SCHEDULE   0x00A3
+#define MB_INPUT_POWERFUL_MODE_TIME    0x00A4
+#define MB_INPUT_QUIET_MODE_LEVEL      0x00A5
+#define MB_INPUT_HOLIDAY_MODE_STATE    0x00A6
+#define MB_INPUT_THREE_WAY_VALVE_STATE 0x00A7
+#define MB_INPUT_DEFROSTING_STATE      0x00A8
+#define MB_INPUT_MAIN_SCHEDULE_STATE   0x00A9
+#define MB_INPUT_ZONES_STATE           0x00AA
 
 // ============================================================================
 // Heaters and sterilization (0x00B0-0x00BF)
 // ============================================================================
-#define MB_INPUT_DHW_HEATER_STATE      0x00B0  // TOP58, uint8
-#define MB_INPUT_ROOM_HEATER_STATE     0x00B1  // TOP59, uint8
-#define MB_INPUT_INTERNAL_HEATER_STATE 0x00B2  // TOP60, uint8
-#define MB_INPUT_EXTERNAL_HEATER_STATE 0x00B3  // TOP61, uint8
-#define MB_INPUT_FORCE_HEATER_STATE    0x00B4  // TOP68, uint8
-#define MB_INPUT_STERILIZATION_STATE   0x00B5  // TOP69, uint8
-#define MB_INPUT_STERILIZATION_TEMP    0x00B6  // TOP70, int16 (*100)
-#define MB_INPUT_STERILIZATION_MAX_TIME 0x00B7 // TOP71, uint8
+#define MB_INPUT_DHW_HEATER_STATE      0x00B0
+#define MB_INPUT_ROOM_HEATER_STATE     0x00B1
+#define MB_INPUT_INTERNAL_HEATER_STATE 0x00B2
+#define MB_INPUT_EXTERNAL_HEATER_STATE 0x00B3
+#define MB_INPUT_FORCE_HEATER_STATE    0x00B4
+#define MB_INPUT_STERILIZATION_STATE   0x00B5
+#define MB_INPUT_STERILIZATION_TEMP    0x00B6
+#define MB_INPUT_STERILIZATION_MAX_TIME 0x00B7
 
 // ============================================================================
 // Deltas and shifts (0x00C0-0x00CF) - all int16 (*100)
 // ============================================================================
-#define MB_INPUT_DHW_HEAT_DELTA        0x00C0  // TOP22, int16 (*100)
-#define MB_INPUT_HEAT_DELTA            0x00C1  // TOP23, int16 (*100)
-#define MB_INPUT_COOL_DELTA            0x00C2  // TOP24, int16 (*100)
-#define MB_INPUT_DHW_HOLIDAY_SHIFT_TEMP 0x00C3 // TOP25, int16 (*100)
-#define MB_INPUT_ROOM_HOLIDAY_SHIFT_TEMP 0x00C4 // TOP45, int16 (*100)
-#define MB_INPUT_BUFFER_TANK_DELTA     0x00C5  // TOP113, int16 (*100)
+#define MB_INPUT_DHW_HEAT_DELTA        0x00C0
+#define MB_INPUT_HEAT_DELTA            0x00C1
+#define MB_INPUT_COOL_DELTA            0x00C2
+#define MB_INPUT_DHW_HOLIDAY_SHIFT_TEMP 0x00C3
+#define MB_INPUT_ROOM_HOLIDAY_SHIFT_TEMP 0x00C4
+#define MB_INPUT_BUFFER_TANK_DELTA     0x00C5
 
 // ============================================================================
 // Heating/Cooling mode settings (0x00D0-0x00DF)
 // ============================================================================
-#define MB_INPUT_HEATING_MODE          0x00D0  // TOP76, uint8
-#define MB_INPUT_HEATING_OFF_OUTDOOR_TEMP 0x00D1 // TOP77, int16 (*100)
-#define MB_INPUT_HEATER_ON_OUTDOOR_TEMP   0x00D2 // TOP78, int16 (*100)
-#define MB_INPUT_HEAT_TO_COOL_TEMP     0x00D3  // TOP79, int16 (*100)
-#define MB_INPUT_COOL_TO_HEAT_TEMP     0x00D4  // TOP80, int16 (*100)
-#define MB_INPUT_COOLING_MODE          0x00D5  // TOP81, uint8
+#define MB_INPUT_HEATING_MODE          0x00D0
+#define MB_INPUT_HEATING_OFF_OUTDOOR_TEMP 0x00D1
+#define MB_INPUT_HEATER_ON_OUTDOOR_TEMP   0x00D2
+#define MB_INPUT_HEAT_TO_COOL_TEMP     0x00D3
+#define MB_INPUT_COOL_TO_HEAT_TEMP     0x00D4
+#define MB_INPUT_COOLING_MODE          0x00D5
 
 // ============================================================================
 // Solar and buffer settings (0x00E0-0x00EF)
 // ============================================================================
-#define MB_INPUT_BUFFER_INSTALLED      0x00E0  // TOP99, uint8
-#define MB_INPUT_DHW_INSTALLED         0x00E1  // TOP100, uint8
-#define MB_INPUT_SOLAR_MODE            0x00E2  // TOP101, uint8
-#define MB_INPUT_SOLAR_ON_DELTA        0x00E3  // TOP102, int16 (*100)
-#define MB_INPUT_SOLAR_OFF_DELTA       0x00E4  // TOP103, int16 (*100)
-#define MB_INPUT_SOLAR_FROST_PROTECTION 0x00E5 // TOP104, int16 (*100)
-#define MB_INPUT_SOLAR_HIGH_LIMIT      0x00E6  // TOP105, int16 (*100)
+#define MB_INPUT_BUFFER_INSTALLED      0x00E0
+#define MB_INPUT_DHW_INSTALLED         0x00E1
+#define MB_INPUT_SOLAR_MODE            0x00E2
+#define MB_INPUT_SOLAR_ON_DELTA        0x00E3
+#define MB_INPUT_SOLAR_OFF_DELTA       0x00E4
+#define MB_INPUT_SOLAR_FROST_PROTECTION 0x00E5
+#define MB_INPUT_SOLAR_HIGH_LIMIT      0x00E6
 
 // ============================================================================
 // Pump and liquid settings (0x00F0-0x00FF)
 // ============================================================================
-#define MB_INPUT_PUMP_FLOWRATE_MODE    0x00F0  // TOP106, uint8
-#define MB_INPUT_LIQUID_TYPE           0x00F1  // TOP107, uint8
-#define MB_INPUT_ALT_EXTERNAL_SENSOR   0x00F2  // TOP108, uint8
-#define MB_INPUT_ANTI_FREEZE_MODE      0x00F3  // TOP109, uint8
-#define MB_INPUT_OPTIONAL_PCB          0x00F4  // TOP110, uint8
-#define MB_INPUT_Z1_SENSOR_SETTINGS    0x00F5  // TOP111, uint8
-#define MB_INPUT_Z2_SENSOR_SETTINGS    0x00F6  // TOP112, uint8
+#define MB_INPUT_PUMP_FLOWRATE_MODE    0x00F0
+#define MB_INPUT_LIQUID_TYPE           0x00F1
+#define MB_INPUT_ALT_EXTERNAL_SENSOR   0x00F2
+#define MB_INPUT_ANTI_FREEZE_MODE      0x00F3
+#define MB_INPUT_OPTIONAL_PCB          0x00F4
+#define MB_INPUT_Z1_SENSOR_SETTINGS    0x00F5
+#define MB_INPUT_Z2_SENSOR_SETTINGS    0x00F6
 
 // ============================================================================
 // External controls (0x0100-0x010F)
 // ============================================================================
-#define MB_INPUT_EXTERNAL_PAD_HEATER   0x0100  // TOP114, uint8
-#define MB_INPUT_WATER_PRESSURE        0x0101  // TOP115, int16 (*100)
-#define MB_INPUT_EXTERNAL_CONTROL      0x0102  // TOP119, uint8
-#define MB_INPUT_EXTERNAL_HEAT_COOL_CONTROL 0x0103 // TOP120, uint8
-#define MB_INPUT_EXTERNAL_ERROR_SIGNAL 0x0104  // TOP121, uint8
-#define MB_INPUT_EXTERNAL_COMPRESSOR_CONTROL 0x0105 // TOP122, uint8
+#define MB_INPUT_EXTERNAL_PAD_HEATER   0x0100
+#define MB_INPUT_WATER_PRESSURE        0x0101
+#define MB_INPUT_EXTERNAL_CONTROL      0x0102
+#define MB_INPUT_EXTERNAL_HEAT_COOL_CONTROL 0x0103
+#define MB_INPUT_EXTERNAL_ERROR_SIGNAL 0x0104
+#define MB_INPUT_EXTERNAL_COMPRESSOR_CONTROL 0x0105
 
 // ============================================================================
 // Pump and valve states (0x0110-0x011F)
 // ============================================================================
-#define MB_INPUT_Z2_PUMP_STATE         0x0110  // TOP123, uint8
-#define MB_INPUT_Z1_PUMP_STATE         0x0111  // TOP124, uint8
-#define MB_INPUT_TWO_WAY_VALVE_STATE   0x0112  // TOP125, uint8
-#define MB_INPUT_THREE_WAY_VALVE_STATE2 0x0113 // TOP126, uint8
-#define MB_INPUT_Z1_VALVE_PID          0x0114  // TOP127, int16 (*100)
-#define MB_INPUT_Z2_VALVE_PID          0x0115  // TOP128, int16 (*100)
+#define MB_INPUT_Z2_PUMP_STATE         0x0110
+#define MB_INPUT_Z1_PUMP_STATE         0x0111
+#define MB_INPUT_TWO_WAY_VALVE_STATE   0x0112
+#define MB_INPUT_THREE_WAY_VALVE_STATE2 0x0113
+#define MB_INPUT_Z1_VALVE_PID          0x0114
+#define MB_INPUT_Z2_VALVE_PID          0x0115
 
 // ============================================================================
 // Bivalent settings (0x0120-0x012F)
 // ============================================================================
-#define MB_INPUT_BIVALENT_CONTROL      0x0120  // TOP129, uint8
-#define MB_INPUT_BIVALENT_MODE         0x0121  // TOP130, uint8
-#define MB_INPUT_BIVALENT_START_TEMP   0x0122  // TOP131, int16 (*100)
-#define MB_INPUT_BIVALENT_ADVANCED_HEAT 0x0123 // TOP132, uint8
-#define MB_INPUT_BIVALENT_ADVANCED_DHW 0x0124  // TOP133, uint8
-#define MB_INPUT_BIVALENT_ADVANCED_START_TEMP 0x0125 // TOP134, int16 (*100)
-#define MB_INPUT_BIVALENT_ADVANCED_STOP_TEMP  0x0126 // TOP135, int16 (*100)
-#define MB_INPUT_BIVALENT_ADVANCED_START_DELAY 0x0127 // TOP136, uint8
-#define MB_INPUT_BIVALENT_ADVANCED_STOP_DELAY  0x0128 // TOP137, uint8
-#define MB_INPUT_BIVALENT_ADVANCED_DHW_DELAY   0x0129 // TOP138, uint8
+#define MB_INPUT_BIVALENT_CONTROL      0x0120
+#define MB_INPUT_BIVALENT_MODE         0x0121
+#define MB_INPUT_BIVALENT_START_TEMP   0x0122
+#define MB_INPUT_BIVALENT_ADVANCED_HEAT 0x0123
+#define MB_INPUT_BIVALENT_ADVANCED_DHW 0x0124
+#define MB_INPUT_BIVALENT_ADVANCED_START_TEMP 0x0125
+#define MB_INPUT_BIVALENT_ADVANCED_STOP_TEMP  0x0126
+#define MB_INPUT_BIVALENT_ADVANCED_START_DELAY 0x0127
+#define MB_INPUT_BIVALENT_ADVANCED_STOP_DELAY  0x0128
+#define MB_INPUT_BIVALENT_ADVANCED_DHW_DELAY   0x0129
 
 // ============================================================================
 // Heater timing settings (0x0130-0x013F)
 // ============================================================================
-#define MB_INPUT_HEATER_DELAY_TIME     0x0130  // TOP96, uint8
-#define MB_INPUT_HEATER_START_DELTA    0x0131  // TOP97, int16 (*100)
-#define MB_INPUT_HEATER_STOP_DELTA     0x0132  // TOP98, int16 (*100)
+#define MB_INPUT_HEATER_DELAY_TIME     0x0130
+#define MB_INPUT_HEATER_START_DELTA    0x0131
+#define MB_INPUT_HEATER_STOP_DELTA     0x0132
 
 // ============================================================================
 // Error info (0x0140-0x0141)
@@ -250,28 +251,28 @@ extern "C" {
 // ============================================================================
 // Heat pump model (0x0150-0x0154) - 5 registers (10 bytes)
 // ============================================================================
-#define MB_INPUT_HP_MODEL_0            0x0150  // TOP92[0-1]
-#define MB_INPUT_HP_MODEL_1            0x0151  // TOP92[2-3]
-#define MB_INPUT_HP_MODEL_2            0x0152  // TOP92[4-5]
-#define MB_INPUT_HP_MODEL_3            0x0153  // TOP92[6-7]
-#define MB_INPUT_HP_MODEL_4            0x0154  // TOP92[8-9]
+#define MB_INPUT_HP_MODEL_0            0x0150
+#define MB_INPUT_HP_MODEL_1            0x0151
+#define MB_INPUT_HP_MODEL_2            0x0152
+#define MB_INPUT_HP_MODEL_3            0x0153
+#define MB_INPUT_HP_MODEL_4            0x0154
 
 // ============================================================================
 // Operation hours (0x0158-0x015F)
 // ============================================================================
-#define MB_INPUT_ROOM_HEATER_OPS_HOURS 0x0158  // TOP90, uint16
-#define MB_INPUT_DHW_HEATER_OPS_HOURS  0x0159  // TOP91, uint16
+#define MB_INPUT_ROOM_HEATER_OPS_HOURS 0x0158
+#define MB_INPUT_DHW_HEATER_OPS_HOURS  0x0159
 
 // ============================================================================
 // Optional PCB data (0x0160-0x016F)
 // ============================================================================
-#define MB_INPUT_Z1_WATER_PUMP         0x0160  // OPT0, uint8
-#define MB_INPUT_Z1_MIXING_VALVE       0x0161  // OPT1, uint8
-#define MB_INPUT_Z2_WATER_PUMP         0x0162  // OPT2, uint8
-#define MB_INPUT_Z2_MIXING_VALVE       0x0163  // OPT3, uint8
-#define MB_INPUT_POOL_WATER_PUMP       0x0164  // OPT4, uint8
-#define MB_INPUT_SOLAR_WATER_PUMP      0x0165  // OPT5, uint8
-#define MB_INPUT_ALARM_STATE           0x0166  // OPT6, uint8
+#define MB_INPUT_Z1_WATER_PUMP         0x0160
+#define MB_INPUT_Z1_MIXING_VALVE       0x0161
+#define MB_INPUT_Z2_WATER_PUMP         0x0162
+#define MB_INPUT_Z2_MIXING_VALVE       0x0163
+#define MB_INPUT_POOL_WATER_PUMP       0x0164
+#define MB_INPUT_SOLAR_WATER_PUMP      0x0165
+#define MB_INPUT_ALARM_STATE           0x0166
 
 // Registers copy fo fast reading
 // Basic temperatures
@@ -416,8 +417,11 @@ extern "C" {
 #define MB_HOLDING_SET_MODBUS_SLAVE_ID      0x1084  // 1-247
 #define MB_HOLDING_APPLY_MODBUS_SETTINGS    0x1085  // write non-zero to apply
 
-// Update total count to cover up to last defined register
-#define MB_REG_HOLDING_COUNT            0x0090  // headroom to cover new ranges
+#define MB_HOLDING_OPT_PCB_AVAILABLE        0x1090  // == 1 - Есть опциональная плата, включить обработку
+
+// Update total count to cover up to last defined register (0x1090)
+// Need at least 0x91 (145) registers, using 0xB0 (176) for safety margin
+#define MB_REG_HOLDING_COUNT            0x00B0  // covers 0x1000-0x10AF (176 registers)
 
 // ============================================================================
 // Register data structures

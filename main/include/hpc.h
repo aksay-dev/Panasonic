@@ -15,7 +15,7 @@ extern "C" {
 #endif
 
 // Application version
-#define HPC_VERSION_STRING "0.1.0"
+#define HPC_VERSION_STRING "0.1.1"
 
 /**
  * @brief Initialize HPC application
@@ -28,6 +28,11 @@ esp_err_t hpc_init(void);
  * @return ESP_OK on success
  */
 esp_err_t hpc_start(void);
+
+/*
+ * @brief Restart application
+ */
+ void app_restart(void);
 
 #ifdef __cplusplus
 }

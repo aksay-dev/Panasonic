@@ -11,7 +11,7 @@
 #include <stdint.h>
 #include <stdbool.h>
 #include "esp_err.h"
-#include "driver/uart.h"
+#include "hal/uart_types.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/queue.h"
 #include "freertos/task.h"
@@ -40,15 +40,14 @@ extern "C" {
 #define PROTOCOL_QUEUE_SIZE 10
 
 // Command data sizes
-#define PROTOCOL_MAX_DATA_SIZE 256
-#define PROTOCOL_MAIN_DATA_SIZE 203
-#define PROTOCOL_EXTRA_DATA_SIZE 110
-#define PROTOCOL_OPT_DATA_SIZE 20
-#define PROTOCOL_WRITE_SIZE 110
-#define PROTOCOL_OPT_WRITE_SIZE 19
+#define PROTOCOL_MAX_DATA_SIZE      256
+#define PROTOCOL_MAIN_DATA_SIZE     203
+#define PROTOCOL_EXTRA_DATA_SIZE    110
+#define PROTOCOL_OPT_DATA_SIZE      20
+#define PROTOCOL_WRITE_SIZE         110
+#define PROTOCOL_OPT_WRITE_SIZE     19
 #define PROTOCOL_HANDSHAKE_DATA_SIZE 51
 
-#define PROTOCOL_OPT_AVAILABLE false
 
 // RX buffer with length metadata
 typedef struct {
@@ -84,7 +83,6 @@ typedef struct {
     QueueHandle_t command_queue;
     TaskHandle_t protocol_task_handle;
     bool extra_data_block_available;
-    bool opt_data_block_available;
 } protocol_context_t;
 
 // Global protocol context

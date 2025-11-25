@@ -9,7 +9,7 @@
 
 #include "decoder.h"
 #include "protocol.h"
-#include "include/modbus_params.h"
+#include "modbus_params.h"
 #include "esp_log.h"
 #include "string.h"
 #include "stdio.h"
@@ -257,14 +257,6 @@ static int16_t getPower(uint8_t input) {
 static int16_t getUint16(uint8_t addr) {
     return (int16_t)((g_protocol_rx.data[addr + 1] << 8) | g_protocol_rx.data[addr]) - 1;
 }
-
-// static uint16_t getPumpFlow() {
-//     // HeishaMon algorithm: PumpFlow1 + PumpFlow2
-//     int PumpFlow1 = (int)g_protocol_rx.data[170];
-//     float PumpFlow2 = (((float)g_protocol_rx.data[169] - 1) / 256);
-//     float PumpFlow = PumpFlow1 + PumpFlow2;
-//     return (uint16_t)(PumpFlow * 100); // Return as l/min * 100
-// }
 
 static int16_t getPumpFlow() {
     // return (uint16_t)g_protocol_rx.data[170] * 100 + ((uint16_t)g_protocol_rx.data[169] - 1) * 100 / 256; // Return as l/min * 100
@@ -553,12 +545,12 @@ esp_err_t decode_extra_data(void) {
     ESP_LOGD(TAG, "Decoding extra data");
     
     // Decode directly into Modbus input registers (uint16_t -> int16_t, compatible)
-    mb_input_registers[MB_INPUT_HEAT_POWER_CONSUMPTION_EXTRA] = (int16_t)getUint16(OFFS_XTOP_HEAT_POWER_CONSUMPTION_EXTRA);
-    mb_input_registers[MB_INPUT_COOL_POWER_CONSUMPTION_EXTRA] = (int16_t)getUint16(OFFS_XTOP_COOL_POWER_CONSUMPTION_EXTRA);
-    mb_input_registers[MB_INPUT_DHW_POWER_CONSUMPTION_EXTRA] = (int16_t)getUint16(OFFS_XTOP_DHW_POWER_CONSUMPTION_EXTRA);
-    mb_input_registers[MB_INPUT_HEAT_POWER_PRODUCTION_EXTRA] = (int16_t)getUint16(OFFS_XTOP_HEAT_POWER_PRODUCTION_EXTRA);
-    mb_input_registers[MB_INPUT_COOL_POWER_PRODUCTION_EXTRA] = (int16_t)getUint16(OFFS_XTOP_COOL_POWER_PRODUCTION_EXTRA);
-    mb_input_registers[MB_INPUT_DHW_POWER_PRODUCTION_EXTRA] = (int16_t)getUint16(OFFS_XTOP_DHW_POWER_PRODUCTION_EXTRA);
+    mb_input_registers[MB_INPUT_HEAT_POWER_CONSUMPTION_EXTRA] = getUint16(OFFS_XTOP_HEAT_POWER_CONSUMPTION_EXTRA);
+    mb_input_registers[MB_INPUT_COOL_POWER_CONSUMPTION_EXTRA] = getUint16(OFFS_XTOP_COOL_POWER_CONSUMPTION_EXTRA);
+    mb_input_registers[MB_INPUT_DHW_POWER_CONSUMPTION_EXTRA] = getUint16(OFFS_XTOP_DHW_POWER_CONSUMPTION_EXTRA);
+    mb_input_registers[MB_INPUT_HEAT_POWER_PRODUCTION_EXTRA] = getUint16(OFFS_XTOP_HEAT_POWER_PRODUCTION_EXTRA);
+    mb_input_registers[MB_INPUT_COOL_POWER_PRODUCTION_EXTRA] = getUint16(OFFS_XTOP_COOL_POWER_PRODUCTION_EXTRA);
+    mb_input_registers[MB_INPUT_DHW_POWER_PRODUCTION_EXTRA] = getUint16(OFFS_XTOP_DHW_POWER_PRODUCTION_EXTRA);
     
     ESP_LOGD(TAG, "Extra data decoded successfully");
     return ESP_OK;
@@ -685,14 +677,14 @@ void log_main_data(void) {
     ESP_LOGI(TAG, "z2_cool_curve_outside_low_temp: %d", mb_input_registers[MB_INPUT_Z2_COOL_CURVE_OUTSIDE_LOW]);
     
     // Heaters
-    ESP_LOGI(TAG, "dhw_heater_state: %u", (uint16_t)mb_input_registers[MB_INPUT_DHW_HEATER_STATE]);
-    ESP_LOGI(TAG, "room_heater_state: %u", (uint16_t)mb_input_registers[MB_INPUT_ROOM_HEATER_STATE]);
-    ESP_LOGI(TAG, "internal_heater_state: %u", (uint16_t)mb_input_registers[MB_INPUT_INTERNAL_HEATER_STATE]);
-    ESP_LOGI(TAG, "external_heater_state: %u", (uint16_t)mb_input_registers[MB_INPUT_EXTERNAL_HEATER_STATE]);
-    ESP_LOGI(TAG, "force_heater_state: %u", (uint16_t)mb_input_registers[MB_INPUT_FORCE_HEATER_STATE]);
-    ESP_LOGI(TAG, "sterilization_state: %u", (uint16_t)mb_input_registers[MB_INPUT_STERILIZATION_STATE]);
+    ESP_LOGI(TAG, "dhw_heater_state: %u", mb_input_registers[MB_INPUT_DHW_HEATER_STATE]);
+    ESP_LOGI(TAG, "room_heater_state: %u", mb_input_registers[MB_INPUT_ROOM_HEATER_STATE]);
+    ESP_LOGI(TAG, "internal_heater_state: %u", mb_input_registers[MB_INPUT_INTERNAL_HEATER_STATE]);
+    ESP_LOGI(TAG, "external_heater_state: %u", mb_input_registers[MB_INPUT_EXTERNAL_HEATER_STATE]);
+    ESP_LOGI(TAG, "force_heater_state: %u", mb_input_registers[MB_INPUT_FORCE_HEATER_STATE]);
+    ESP_LOGI(TAG, "sterilization_state: %u", mb_input_registers[MB_INPUT_STERILIZATION_STATE]);
     ESP_LOGI(TAG, "sterilization_temp: %d", mb_input_registers[MB_INPUT_STERILIZATION_TEMP]);
-    ESP_LOGI(TAG, "sterilization_max_time: %u", (uint16_t)mb_input_registers[MB_INPUT_STERILIZATION_MAX_TIME]);
+    ESP_LOGI(TAG, "sterilization_max_time: %u", mb_input_registers[MB_INPUT_STERILIZATION_MAX_TIME]);
     
     // Deltas
     ESP_LOGI(TAG, "dhw_heat_delta: %d", mb_input_registers[MB_INPUT_DHW_HEAT_DELTA]);
@@ -703,71 +695,71 @@ void log_main_data(void) {
     ESP_LOGI(TAG, "buffer_tank_delta: %d", mb_input_registers[MB_INPUT_BUFFER_TANK_DELTA]);
     
     // Modes
-    ESP_LOGI(TAG, "heating_mode: %u", (uint16_t)mb_input_registers[MB_INPUT_HEATING_MODE]);
+    ESP_LOGI(TAG, "heating_mode: %u", mb_input_registers[MB_INPUT_HEATING_MODE]);
     ESP_LOGI(TAG, "heating_off_outdoor_temp: %d", mb_input_registers[MB_INPUT_HEATING_OFF_OUTDOOR_TEMP]);
     ESP_LOGI(TAG, "heater_on_outdoor_temp: %d", mb_input_registers[MB_INPUT_HEATER_ON_OUTDOOR_TEMP]);
     ESP_LOGI(TAG, "heat_to_cool_temp: %d", mb_input_registers[MB_INPUT_HEAT_TO_COOL_TEMP]);
     ESP_LOGI(TAG, "cool_to_heat_temp: %d", mb_input_registers[MB_INPUT_COOL_TO_HEAT_TEMP]);
-    ESP_LOGI(TAG, "cooling_mode: %u", (uint16_t)mb_input_registers[MB_INPUT_COOLING_MODE]);
+    ESP_LOGI(TAG, "cooling_mode: %u", mb_input_registers[MB_INPUT_COOLING_MODE]);
     
     // Solar/Buffer
-    ESP_LOGI(TAG, "buffer_installed: %u", (uint16_t)mb_input_registers[MB_INPUT_BUFFER_INSTALLED]);
-    ESP_LOGI(TAG, "dhw_installed: %u", (uint16_t)mb_input_registers[MB_INPUT_DHW_INSTALLED]);
-    ESP_LOGI(TAG, "solar_mode: %u", (uint16_t)mb_input_registers[MB_INPUT_SOLAR_MODE]);
+    ESP_LOGI(TAG, "buffer_installed: %u", mb_input_registers[MB_INPUT_BUFFER_INSTALLED]);
+    ESP_LOGI(TAG, "dhw_installed: %u", mb_input_registers[MB_INPUT_DHW_INSTALLED]);
+    ESP_LOGI(TAG, "solar_mode: %u", mb_input_registers[MB_INPUT_SOLAR_MODE]);
     ESP_LOGI(TAG, "solar_on_delta: %d", mb_input_registers[MB_INPUT_SOLAR_ON_DELTA]);
     ESP_LOGI(TAG, "solar_off_delta: %d", mb_input_registers[MB_INPUT_SOLAR_OFF_DELTA]);
     ESP_LOGI(TAG, "solar_frost_protection: %d", mb_input_registers[MB_INPUT_SOLAR_FROST_PROTECTION]);
     ESP_LOGI(TAG, "solar_high_limit: %d", mb_input_registers[MB_INPUT_SOLAR_HIGH_LIMIT]);
     
     // Pump/Liquid
-    ESP_LOGI(TAG, "pump_flowrate_mode: %u", (uint16_t)mb_input_registers[MB_INPUT_PUMP_FLOWRATE_MODE]);
-    ESP_LOGI(TAG, "liquid_type: %u", (uint16_t)mb_input_registers[MB_INPUT_LIQUID_TYPE]);
-    ESP_LOGI(TAG, "alt_external_sensor: %u", (uint16_t)mb_input_registers[MB_INPUT_ALT_EXTERNAL_SENSOR]);
-    ESP_LOGI(TAG, "anti_freeze_mode: %u", (uint16_t)mb_input_registers[MB_INPUT_ANTI_FREEZE_MODE]);
-    ESP_LOGI(TAG, "optional_pcb: %u", (uint16_t)mb_input_registers[MB_INPUT_OPTIONAL_PCB]);
+    ESP_LOGI(TAG, "pump_flowrate_mode: %u", mb_input_registers[MB_INPUT_PUMP_FLOWRATE_MODE]);
+    ESP_LOGI(TAG, "liquid_type: %u", mb_input_registers[MB_INPUT_LIQUID_TYPE]);
+    ESP_LOGI(TAG, "alt_external_sensor: %u", mb_input_registers[MB_INPUT_ALT_EXTERNAL_SENSOR]);
+    ESP_LOGI(TAG, "anti_freeze_mode: %u", mb_input_registers[MB_INPUT_ANTI_FREEZE_MODE]);
+    ESP_LOGI(TAG, "optional_pcb: %u", mb_input_registers[MB_INPUT_OPTIONAL_PCB]);
     
     // Zone sensors
-    ESP_LOGI(TAG, "z1_sensor_settings: %u", (uint16_t)mb_input_registers[MB_INPUT_Z1_SENSOR_SETTINGS]);
-    ESP_LOGI(TAG, "z2_sensor_settings: %u", (uint16_t)mb_input_registers[MB_INPUT_Z2_SENSOR_SETTINGS]);
+    ESP_LOGI(TAG, "z1_sensor_settings: %u", mb_input_registers[MB_INPUT_Z1_SENSOR_SETTINGS]);
+    ESP_LOGI(TAG, "z2_sensor_settings: %u", mb_input_registers[MB_INPUT_Z2_SENSOR_SETTINGS]);
     
     // External
-    ESP_LOGI(TAG, "external_pad_heater: %u", (uint16_t)mb_input_registers[MB_INPUT_EXTERNAL_PAD_HEATER]);
+    ESP_LOGI(TAG, "external_pad_heater: %u", mb_input_registers[MB_INPUT_EXTERNAL_PAD_HEATER]);
     ESP_LOGI(TAG, "water_pressure: %d", mb_input_registers[MB_INPUT_WATER_PRESSURE]);
-    ESP_LOGI(TAG, "external_control: %u", (uint16_t)mb_input_registers[MB_INPUT_EXTERNAL_CONTROL]);
-    ESP_LOGI(TAG, "external_heat_cool_control: %u", (uint16_t)mb_input_registers[MB_INPUT_EXTERNAL_HEAT_COOL_CONTROL]);
-    ESP_LOGI(TAG, "external_error_signal: %u", (uint16_t)mb_input_registers[MB_INPUT_EXTERNAL_ERROR_SIGNAL]);
-    ESP_LOGI(TAG, "external_compressor_control: %u", (uint16_t)mb_input_registers[MB_INPUT_EXTERNAL_COMPRESSOR_CONTROL]);
+    ESP_LOGI(TAG, "external_control: %u", mb_input_registers[MB_INPUT_EXTERNAL_CONTROL]);
+    ESP_LOGI(TAG, "external_heat_cool_control: %u", mb_input_registers[MB_INPUT_EXTERNAL_HEAT_COOL_CONTROL]);
+    ESP_LOGI(TAG, "external_error_signal: %u", mb_input_registers[MB_INPUT_EXTERNAL_ERROR_SIGNAL]);
+    ESP_LOGI(TAG, "external_compressor_control: %u", mb_input_registers[MB_INPUT_EXTERNAL_COMPRESSOR_CONTROL]);
     
     // Pumps
-    ESP_LOGI(TAG, "z2_pump_state: %u", (uint16_t)mb_input_registers[MB_INPUT_Z2_PUMP_STATE]);
-    ESP_LOGI(TAG, "z1_pump_state: %u", (uint16_t)mb_input_registers[MB_INPUT_Z1_PUMP_STATE]);
-    ESP_LOGI(TAG, "two_way_valve_state: %u", (uint16_t)mb_input_registers[MB_INPUT_TWO_WAY_VALVE_STATE]);
-    ESP_LOGI(TAG, "three_way_valve_state2: %u", (uint16_t)mb_input_registers[MB_INPUT_THREE_WAY_VALVE_STATE2]);
+    ESP_LOGI(TAG, "z2_pump_state: %u", mb_input_registers[MB_INPUT_Z2_PUMP_STATE]);
+    ESP_LOGI(TAG, "z1_pump_state: %u", mb_input_registers[MB_INPUT_Z1_PUMP_STATE]);
+    ESP_LOGI(TAG, "two_way_valve_state: %u", mb_input_registers[MB_INPUT_TWO_WAY_VALVE_STATE]);
+    ESP_LOGI(TAG, "three_way_valve_state2: %u", mb_input_registers[MB_INPUT_THREE_WAY_VALVE_STATE2]);
     
     // PID
     ESP_LOGI(TAG, "z1_valve_pid: %d", mb_input_registers[MB_INPUT_Z1_VALVE_PID]);
     ESP_LOGI(TAG, "z2_valve_pid: %d", mb_input_registers[MB_INPUT_Z2_VALVE_PID]);
     
     // Bivalent
-    ESP_LOGI(TAG, "bivalent_control: %u", (uint16_t)mb_input_registers[MB_INPUT_BIVALENT_CONTROL]);
-    ESP_LOGI(TAG, "bivalent_mode: %u", (uint16_t)mb_input_registers[MB_INPUT_BIVALENT_MODE]);
+    ESP_LOGI(TAG, "bivalent_control: %u", mb_input_registers[MB_INPUT_BIVALENT_CONTROL]);
+    ESP_LOGI(TAG, "bivalent_mode: %u", mb_input_registers[MB_INPUT_BIVALENT_MODE]);
     ESP_LOGI(TAG, "bivalent_start_temp: %d", mb_input_registers[MB_INPUT_BIVALENT_START_TEMP]);
-    ESP_LOGI(TAG, "bivalent_advanced_heat: %u", (uint16_t)mb_input_registers[MB_INPUT_BIVALENT_ADVANCED_HEAT]);
-    ESP_LOGI(TAG, "bivalent_advanced_dhw: %u", (uint16_t)mb_input_registers[MB_INPUT_BIVALENT_ADVANCED_DHW]);
+    ESP_LOGI(TAG, "bivalent_advanced_heat: %u", mb_input_registers[MB_INPUT_BIVALENT_ADVANCED_HEAT]);
+    ESP_LOGI(TAG, "bivalent_advanced_dhw: %u", mb_input_registers[MB_INPUT_BIVALENT_ADVANCED_DHW]);
     ESP_LOGI(TAG, "bivalent_advanced_start_temp: %d", mb_input_registers[MB_INPUT_BIVALENT_ADVANCED_START_TEMP]);
     ESP_LOGI(TAG, "bivalent_advanced_stop_temp: %d", mb_input_registers[MB_INPUT_BIVALENT_ADVANCED_STOP_TEMP]);
-    ESP_LOGI(TAG, "bivalent_advanced_start_delay: %u", (uint16_t)mb_input_registers[MB_INPUT_BIVALENT_ADVANCED_START_DELAY]);
-    ESP_LOGI(TAG, "bivalent_advanced_stop_delay: %u", (uint16_t)mb_input_registers[MB_INPUT_BIVALENT_ADVANCED_STOP_DELAY]);
-    ESP_LOGI(TAG, "bivalent_advanced_dhw_delay: %u", (uint16_t)mb_input_registers[MB_INPUT_BIVALENT_ADVANCED_DHW_DELAY]);
+    ESP_LOGI(TAG, "bivalent_advanced_start_delay: %u", mb_input_registers[MB_INPUT_BIVALENT_ADVANCED_START_DELAY]);
+    ESP_LOGI(TAG, "bivalent_advanced_stop_delay: %u", mb_input_registers[MB_INPUT_BIVALENT_ADVANCED_STOP_DELAY]);
+    ESP_LOGI(TAG, "bivalent_advanced_dhw_delay: %u", mb_input_registers[MB_INPUT_BIVALENT_ADVANCED_DHW_DELAY]);
     
     // Heater timing settings
-    ESP_LOGI(TAG, "heater_delay_time: %u", (uint16_t)mb_input_registers[MB_INPUT_HEATER_DELAY_TIME]);
+    ESP_LOGI(TAG, "heater_delay_time: %u", mb_input_registers[MB_INPUT_HEATER_DELAY_TIME]);
     ESP_LOGI(TAG, "heater_start_delta: %d", mb_input_registers[MB_INPUT_HEATER_START_DELTA]);
     ESP_LOGI(TAG, "heater_stop_delta: %d", mb_input_registers[MB_INPUT_HEATER_STOP_DELTA]);
     
     // Hours
-    ESP_LOGI(TAG, "room_heater_operations_hours: %u", (uint16_t)mb_input_registers[MB_INPUT_ROOM_HEATER_OPS_HOURS]);
-    ESP_LOGI(TAG, "dhw_heater_operations_hours: %u", (uint16_t)mb_input_registers[MB_INPUT_DHW_HEATER_OPS_HOURS]);
+    ESP_LOGI(TAG, "room_heater_operations_hours: %u", mb_input_registers[MB_INPUT_ROOM_HEATER_OPS_HOURS]);
+    ESP_LOGI(TAG, "dhw_heater_operations_hours: %u", mb_input_registers[MB_INPUT_DHW_HEATER_OPS_HOURS]);
     ESP_LOGI(TAG, "error_type: '%c'", (char)mb_input_registers[MB_INPUT_ERROR_TYPE]);
     ESP_LOGI(TAG, "error_number: %d", mb_input_registers[MB_INPUT_ERROR_NUMBER]);
 
@@ -786,23 +778,23 @@ void log_main_data(void) {
 
 void log_extra_data(void) {
     ESP_LOGI(TAG, "=== DECODED EXTRA DATA ===");
-    ESP_LOGI(TAG, "heat_power_consumption_extra: %u", (uint16_t)mb_input_registers[MB_INPUT_HEAT_POWER_CONSUMPTION_EXTRA]);
-    ESP_LOGI(TAG, "cool_power_consumption_extra: %u", (uint16_t)mb_input_registers[MB_INPUT_COOL_POWER_CONSUMPTION_EXTRA]);
-    ESP_LOGI(TAG, "dhw_power_consumption_extra: %u", (uint16_t)mb_input_registers[MB_INPUT_DHW_POWER_CONSUMPTION_EXTRA]);
-    ESP_LOGI(TAG, "heat_power_production_extra: %u", (uint16_t)mb_input_registers[MB_INPUT_HEAT_POWER_PRODUCTION_EXTRA]);
-    ESP_LOGI(TAG, "cool_power_production_extra: %u", (uint16_t)mb_input_registers[MB_INPUT_COOL_POWER_PRODUCTION_EXTRA]);
-    ESP_LOGI(TAG, "dhw_power_production_extra: %u", (uint16_t)mb_input_registers[MB_INPUT_DHW_POWER_PRODUCTION_EXTRA]);
+    ESP_LOGI(TAG, "heat_power_consumption_extra: %u", mb_input_registers[MB_INPUT_HEAT_POWER_CONSUMPTION_EXTRA]);
+    ESP_LOGI(TAG, "cool_power_consumption_extra: %u", mb_input_registers[MB_INPUT_COOL_POWER_CONSUMPTION_EXTRA]);
+    ESP_LOGI(TAG, "dhw_power_consumption_extra: %u", mb_input_registers[MB_INPUT_DHW_POWER_CONSUMPTION_EXTRA]);
+    ESP_LOGI(TAG, "heat_power_production_extra: %u", mb_input_registers[MB_INPUT_HEAT_POWER_PRODUCTION_EXTRA]);
+    ESP_LOGI(TAG, "cool_power_production_extra: %u", mb_input_registers[MB_INPUT_COOL_POWER_PRODUCTION_EXTRA]);
+    ESP_LOGI(TAG, "dhw_power_production_extra: %u", mb_input_registers[MB_INPUT_DHW_POWER_PRODUCTION_EXTRA]);
     ESP_LOGI(TAG, "=== END DECODED EXTRA DATA ===");
 }
 
 void log_opt_data(void) {
     ESP_LOGI(TAG, "=== DECODED OPT DATA ===");
-    ESP_LOGI(TAG, "z1_water_pump: %u", (uint8_t)mb_input_registers[MB_INPUT_Z1_WATER_PUMP]);
-    ESP_LOGI(TAG, "z1_mixing_valve: %u", (uint8_t)mb_input_registers[MB_INPUT_Z1_MIXING_VALVE]);
-    ESP_LOGI(TAG, "z2_water_pump: %u", (uint8_t)mb_input_registers[MB_INPUT_Z2_WATER_PUMP]);
-    ESP_LOGI(TAG, "z2_mixing_valve: %u", (uint8_t)mb_input_registers[MB_INPUT_Z2_MIXING_VALVE]);
-    ESP_LOGI(TAG, "pool_water_pump: %u", (uint8_t)mb_input_registers[MB_INPUT_POOL_WATER_PUMP]);
-    ESP_LOGI(TAG, "solar_water_pump: %u", (uint8_t)mb_input_registers[MB_INPUT_SOLAR_WATER_PUMP]);
-    ESP_LOGI(TAG, "alarm_state: %u", (uint8_t)mb_input_registers[MB_INPUT_ALARM_STATE]);
+    ESP_LOGI(TAG, "z1_water_pump: %u", mb_input_registers[MB_INPUT_Z1_WATER_PUMP]);
+    ESP_LOGI(TAG, "z1_mixing_valve: %u", mb_input_registers[MB_INPUT_Z1_MIXING_VALVE]);
+    ESP_LOGI(TAG, "z2_water_pump: %u", mb_input_registers[MB_INPUT_Z2_WATER_PUMP]);
+    ESP_LOGI(TAG, "z2_mixing_valve: %u", mb_input_registers[MB_INPUT_Z2_MIXING_VALVE]);
+    ESP_LOGI(TAG, "pool_water_pump: %u", mb_input_registers[MB_INPUT_POOL_WATER_PUMP]);
+    ESP_LOGI(TAG, "solar_water_pump: %u", mb_input_registers[MB_INPUT_SOLAR_WATER_PUMP]);
+    ESP_LOGI(TAG, "alarm_state: %u", mb_input_registers[MB_INPUT_ALARM_STATE]);
     ESP_LOGI(TAG, "=== END DECODED OPT DATA ===");
 }
