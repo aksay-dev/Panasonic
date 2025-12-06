@@ -409,13 +409,13 @@ extern "C" {
 #define MB_HOLDING_CURVES_REGS              16
 #define MB_HOLDING_CURVES_APPLY             0x1070  // write any value to apply
 
-// Modbus serial configuration (0x1080-0x1085)
+// Modbus serial configuration (0x1080-0x1084)
+// Изменения сохраняются в NVS и применяются при следующей перезагрузке
 #define MB_HOLDING_SET_MODBUS_BAUD          0x1080  // uint16, baudrate (1200-57600)
 #define MB_HOLDING_SET_MODBUS_PARITY        0x1081  // 0=None, 1=Even, 2=Odd
 #define MB_HOLDING_SET_MODBUS_STOP_BITS     0x1082  // 1 or 2 stop bits
 #define MB_HOLDING_SET_MODBUS_DATA_BITS     0x1083  // 7 or 8 data bits
 #define MB_HOLDING_SET_MODBUS_SLAVE_ID      0x1084  // 1-247
-#define MB_HOLDING_APPLY_MODBUS_SETTINGS    0x1085  // write non-zero to apply
 
 #define MB_HOLDING_OPT_PCB_AVAILABLE        0x1090  // == 1 - Есть опциональная плата, включить обработку
 
@@ -451,6 +451,12 @@ esp_err_t modbus_params_process_holding_write(uint16_t reg_addr);
  * @brief Sync holding registers with current serial configuration
  */
 void modbus_params_sync_serial_registers(void);
+
+/**
+ * @brief Sync holding registers with current decoded heat pump data
+ * This allows reading current values (temperatures, deltas, etc.) from holding registers
+ */
+void modbus_params_sync_holding_from_input(void);
 
 #ifdef __cplusplus
 }

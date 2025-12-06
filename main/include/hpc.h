@@ -29,6 +29,16 @@ esp_err_t hpc_init(void);
  */
 esp_err_t hpc_start(void);
 
+/**
+ * @brief Initialize factory reset button
+ */
+void hpc_factory_reset_button_init(void);
+
+/**
+ * @brief Poll factory reset button (call periodically)
+ */
+void hpc_factory_reset_button_poll(void);
+
 /*
  * @brief Restart application
  */

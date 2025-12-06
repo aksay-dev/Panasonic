@@ -8,6 +8,7 @@
 #include "protocol.h"
 #include "decoder.h"
 #include "modbus_params.h"
+#include "modbus_slave.h"
 #include "esp_log.h"
 #include "driver/uart.h"
 #include "freertos/task.h"
@@ -184,6 +185,10 @@ static esp_err_t protocol_process_received_data(const uint8_t *data, size_t size
         esp_err_t decode_ret = decode_main_data();
         if (decode_ret == ESP_OK) {
             ESP_LOGI(TAG, "Main data decoded successfully");
+            // Sync holding registers with current decoded values
+            modbus_params_sync_holding_from_input();
+            // Update shadow copy to prevent false change detection
+            modbus_slave_update_shadow_copy();
             // Log main data
             // log_main_data();
         } else {

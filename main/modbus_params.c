@@ -22,16 +22,6 @@ int16_t mb_holding_registers[MB_REG_HOLDING_COUNT] = {0};
 
 #define HOLDING_INDEX(reg)  ((reg) - MB_REG_HOLDING_START)
 
-enum {
-    IDX_MODBUS_BAUD = HOLDING_INDEX(MB_HOLDING_SET_MODBUS_BAUD),
-    IDX_MODBUS_PARITY = HOLDING_INDEX(MB_HOLDING_SET_MODBUS_PARITY),
-    IDX_MODBUS_STOP_BITS = HOLDING_INDEX(MB_HOLDING_SET_MODBUS_STOP_BITS),
-    IDX_MODBUS_DATA_BITS = HOLDING_INDEX(MB_HOLDING_SET_MODBUS_DATA_BITS),
-    IDX_MODBUS_SLAVE_ID = HOLDING_INDEX(MB_HOLDING_SET_MODBUS_SLAVE_ID),
-    IDX_MODBUS_APPLY_MODBUS_SETTINGS = HOLDING_INDEX(MB_HOLDING_APPLY_MODBUS_SETTINGS),
-    IDX_MODBUS_OPT_PCB = HOLDING_INDEX(MB_HOLDING_OPT_PCB_AVAILABLE)
-};
-
 static bool modbus_is_supported_baud(uint32_t baud);
 static bool modbus_decode_parity(uint16_t code, uart_parity_t *parity);
 static int16_t modbus_encode_parity(uart_parity_t parity);
@@ -40,7 +30,6 @@ static int16_t modbus_encode_stop_bits(uart_stop_bits_t stop_bits);
 static bool modbus_decode_data_bits(uint16_t code, uart_word_length_t *data_bits);
 static int16_t modbus_encode_data_bits(uart_word_length_t data_bits);
 static bool modbus_is_valid_slave_id(uint32_t value);
-static void modbus_restore_serial_field(uint16_t reg_addr);
 void modbus_params_sync_serial_registers(void);
 static esp_err_t modbus_build_serial_config_from_registers(modbus_serial_config_t *cfg);
 
@@ -123,45 +112,77 @@ static bool modbus_is_valid_slave_id(uint32_t value) {
     return (value >= 1U && value <= 247U);
 }
 
-static void modbus_restore_serial_field(uint16_t reg_addr) {
-    modbus_serial_config_t cfg;
-    if (modbus_slave_get_serial_config(&cfg) != ESP_OK) {
-        return;
-    }
-
-    switch (reg_addr) {
-        case MB_HOLDING_SET_MODBUS_BAUD:
-            mb_holding_registers[IDX_MODBUS_BAUD] = (int16_t)(cfg.baudrate & 0xFFFF);
-            break;
-        case MB_HOLDING_SET_MODBUS_PARITY:
-            mb_holding_registers[IDX_MODBUS_PARITY] = modbus_encode_parity(cfg.parity);
-            break;
-        case MB_HOLDING_SET_MODBUS_STOP_BITS:
-            mb_holding_registers[IDX_MODBUS_STOP_BITS] = modbus_encode_stop_bits(cfg.stop_bits);
-            break;
-        case MB_HOLDING_SET_MODBUS_DATA_BITS:
-            mb_holding_registers[IDX_MODBUS_DATA_BITS] = modbus_encode_data_bits(cfg.data_bits);
-            break;
-        case MB_HOLDING_SET_MODBUS_SLAVE_ID:
-            mb_holding_registers[IDX_MODBUS_SLAVE_ID] = (int16_t)cfg.slave_addr;
-            break;
-        default:
-            break;
-    }
-}
-
 void modbus_params_sync_serial_registers(void) {
     modbus_serial_config_t cfg;
     if (modbus_slave_get_serial_config(&cfg) != ESP_OK) {
         return;
     }
 
-    mb_holding_registers[IDX_MODBUS_BAUD] = (int16_t)(cfg.baudrate & 0xFFFF);
-    mb_holding_registers[IDX_MODBUS_PARITY] = modbus_encode_parity(cfg.parity);
-    mb_holding_registers[IDX_MODBUS_STOP_BITS] = modbus_encode_stop_bits(cfg.stop_bits);
-    mb_holding_registers[IDX_MODBUS_DATA_BITS] = modbus_encode_data_bits(cfg.data_bits);
-    mb_holding_registers[IDX_MODBUS_SLAVE_ID] = (int16_t)cfg.slave_addr;
-    mb_holding_registers[IDX_MODBUS_APPLY_MODBUS_SETTINGS] = 0;
+    mb_holding_registers[HOLDING_INDEX(MB_HOLDING_SET_MODBUS_BAUD)] = (int16_t)(cfg.baudrate);
+    mb_holding_registers[HOLDING_INDEX(MB_HOLDING_SET_MODBUS_PARITY)] = modbus_encode_parity(cfg.parity);
+    mb_holding_registers[HOLDING_INDEX(MB_HOLDING_SET_MODBUS_STOP_BITS)] = modbus_encode_stop_bits(cfg.stop_bits);
+    mb_holding_registers[HOLDING_INDEX(MB_HOLDING_SET_MODBUS_DATA_BITS)] = modbus_encode_data_bits(cfg.data_bits);
+    mb_holding_registers[HOLDING_INDEX(MB_HOLDING_SET_MODBUS_SLAVE_ID)] = (int16_t)cfg.slave_addr;
+}
+
+/**
+ * @brief Sync holding registers with current decoded heat pump data
+ * This allows reading current values (temperatures, deltas, etc.) from holding registers
+ * Note: All values in input registers are stored as int8_t (from getIntMinus128), 
+ * written as int16_t, so we can copy them directly
+ */
+void modbus_params_sync_holding_from_input(void) {
+    mb_holding_registers[HOLDING_INDEX(MB_HOLDING_SET_HEATPUMP)] = mb_input_registers[MB_INPUT_HEATPUMP_STATE];
+    mb_holding_registers[HOLDING_INDEX(MB_HOLDING_SET_MAX_PUMP_DUTY)] = mb_input_registers[MB_INPUT_MAX_PUMP_DUTY];
+    mb_holding_registers[HOLDING_INDEX(MB_HOLDING_SET_QUIET_MODE)] = mb_input_registers[MB_INPUT_QUIET_MODE_LEVEL];
+    mb_holding_registers[HOLDING_INDEX(MB_HOLDING_SET_OPERATION_MODE)] = mb_input_registers[MB_INPUT_OPERATING_MODE_STATE];
+    mb_holding_registers[HOLDING_INDEX(MB_HOLDING_SET_HOLIDAY_MODE)] = mb_input_registers[MB_INPUT_HOLIDAY_MODE_STATE];
+    mb_holding_registers[HOLDING_INDEX(MB_HOLDING_SET_FORCE_DHW)] = mb_input_registers[MB_INPUT_FORCE_DHW_STATE];
+    mb_holding_registers[HOLDING_INDEX(MB_HOLDING_SET_FORCE_DEFROST)] = mb_input_registers[MB_INPUT_DEFROSTING_STATE];
+    mb_holding_registers[HOLDING_INDEX(MB_HOLDING_SET_FORCE_STERILIZATION)] = mb_input_registers[MB_INPUT_STERILIZATION_STATE];
+    mb_holding_registers[HOLDING_INDEX(MB_HOLDING_SET_MAIN_SCHEDULE)] = mb_input_registers[MB_INPUT_MAIN_SCHEDULE_STATE];
+    mb_holding_registers[HOLDING_INDEX(MB_HOLDING_SET_ZONES)] = mb_input_registers[MB_INPUT_ZONES_STATE];
+    mb_holding_registers[HOLDING_INDEX(MB_HOLDING_SET_EXTERNAL_CONTROL)] = mb_input_registers[MB_INPUT_EXTERNAL_CONTROL];
+    mb_holding_registers[HOLDING_INDEX(MB_HOLDING_SET_EXTERNAL_ERROR)] = mb_input_registers[MB_INPUT_EXTERNAL_ERROR_SIGNAL];
+    mb_holding_registers[HOLDING_INDEX(MB_HOLDING_SET_EXTERNAL_COMPRESSOR_CONTROL)] = mb_input_registers[MB_INPUT_EXTERNAL_COMPRESSOR_CONTROL];
+    mb_holding_registers[HOLDING_INDEX(MB_HOLDING_SET_EXTERNAL_HEAT_COOL_CONTROL)] = mb_input_registers[MB_INPUT_EXTERNAL_HEAT_COOL_CONTROL];
+    mb_holding_registers[HOLDING_INDEX(MB_HOLDING_SET_BIVALENT_CONTROL)] = mb_input_registers[MB_INPUT_BIVALENT_CONTROL];
+    mb_holding_registers[HOLDING_INDEX(MB_HOLDING_SET_BIVALENT_MODE)] = mb_input_registers[MB_INPUT_BIVALENT_MODE];
+    mb_holding_registers[HOLDING_INDEX(MB_HOLDING_SET_ALT_EXTERNAL_SENSOR)] = mb_input_registers[MB_INPUT_ALT_EXTERNAL_SENSOR];
+    mb_holding_registers[HOLDING_INDEX(MB_HOLDING_SET_EXTERNAL_PAD_HEATER)] = mb_input_registers[MB_INPUT_EXTERNAL_PAD_HEATER];
+    mb_holding_registers[HOLDING_INDEX(MB_HOLDING_SET_BUFFER)] = mb_input_registers[MB_INPUT_BUFFER_INSTALLED];
+
+    // Temperature setpoints (int8_t in input, stored as int16_t in holding)
+    // These are current values that can be read from holding registers
+    mb_holding_registers[HOLDING_INDEX(MB_HOLDING_SET_Z1_HEAT_TEMP)] = mb_input_registers[MB_INPUT_Z1_HEAT_REQUEST_TEMP];
+    mb_holding_registers[HOLDING_INDEX(MB_HOLDING_SET_Z1_COOL_TEMP)] = mb_input_registers[MB_INPUT_Z1_COOL_REQUEST_TEMP];
+    mb_holding_registers[HOLDING_INDEX(MB_HOLDING_SET_Z2_HEAT_TEMP)] = mb_input_registers[MB_INPUT_Z2_HEAT_REQUEST_TEMP];
+    mb_holding_registers[HOLDING_INDEX(MB_HOLDING_SET_Z2_COOL_TEMP)] = mb_input_registers[MB_INPUT_Z2_COOL_REQUEST_TEMP];
+    mb_holding_registers[HOLDING_INDEX(MB_HOLDING_SET_DHW_TEMP)] = mb_input_registers[MB_INPUT_DHW_TARGET_TEMP];
+    
+    // Deltas and timing (int8_t in input, stored as int16_t in holding)
+    // getIntMinus128 returns int8_t value, stored as int16_t, so copy directly
+    mb_holding_registers[HOLDING_INDEX(MB_HOLDING_SET_BUFFER_DELTA)] = mb_input_registers[MB_INPUT_BUFFER_TANK_DELTA];
+    mb_holding_registers[HOLDING_INDEX(MB_HOLDING_SET_FLOOR_HEAT_DELTA)] = mb_input_registers[MB_INPUT_HEAT_DELTA];
+    mb_holding_registers[HOLDING_INDEX(MB_HOLDING_SET_FLOOR_COOL_DELTA)] = mb_input_registers[MB_INPUT_COOL_DELTA];
+    mb_holding_registers[HOLDING_INDEX(MB_HOLDING_SET_DHW_HEAT_DELTA)] = mb_input_registers[MB_INPUT_DHW_HEAT_DELTA];
+    mb_holding_registers[HOLDING_INDEX(MB_HOLDING_SET_HEATER_START_DELTA)] = mb_input_registers[MB_INPUT_HEATER_START_DELTA];
+    mb_holding_registers[HOLDING_INDEX(MB_HOLDING_SET_HEATER_STOP_DELTA)] = mb_input_registers[MB_INPUT_HEATER_STOP_DELTA];
+    mb_holding_registers[HOLDING_INDEX(MB_HOLDING_SET_HEATER_DELAY_TIME)] = mb_input_registers[MB_INPUT_HEATER_DELAY_TIME];
+    
+    // Bivalent temperatures (int8_t in input, stored as int16_t in holding)
+    mb_holding_registers[HOLDING_INDEX(MB_HOLDING_SET_BIVALENT_START_TEMP)] = mb_input_registers[MB_INPUT_BIVALENT_START_TEMP];
+    mb_holding_registers[HOLDING_INDEX(MB_HOLDING_SET_BIVALENT_AP_START_TEMP)] = mb_input_registers[MB_INPUT_BIVALENT_ADVANCED_START_TEMP];
+    mb_holding_registers[HOLDING_INDEX(MB_HOLDING_SET_BIVALENT_AP_STOP_TEMP)] = mb_input_registers[MB_INPUT_BIVALENT_ADVANCED_STOP_TEMP];
+    
+    // Optional temperatures (int8_t in input, stored as int16_t in holding)
+    mb_holding_registers[HOLDING_INDEX(MB_HOLDING_SET_POOL_TEMP)] = mb_input_registers[MB_INPUT_POOL_TEMP];
+    mb_holding_registers[HOLDING_INDEX(MB_HOLDING_SET_BUFFER_TEMP)] = mb_input_registers[MB_INPUT_BUFFER_TEMP];
+    mb_holding_registers[HOLDING_INDEX(MB_HOLDING_SET_Z1_ROOM_TEMP)] = mb_input_registers[MB_INPUT_Z1_ROOM_TEMP];
+    mb_holding_registers[HOLDING_INDEX(MB_HOLDING_SET_Z1_WATER_TEMP)] = mb_input_registers[MB_INPUT_Z1_WATER_TEMP];
+    mb_holding_registers[HOLDING_INDEX(MB_HOLDING_SET_Z2_ROOM_TEMP)] = mb_input_registers[MB_INPUT_Z2_ROOM_TEMP];
+    mb_holding_registers[HOLDING_INDEX(MB_HOLDING_SET_Z2_WATER_TEMP)] = mb_input_registers[MB_INPUT_Z2_WATER_TEMP];
+    mb_holding_registers[HOLDING_INDEX(MB_HOLDING_SET_SOLAR_TEMP)] = mb_input_registers[MB_INPUT_SOLAR_TEMP];
 }
 
 static esp_err_t modbus_build_serial_config_from_registers(modbus_serial_config_t *cfg) {
@@ -169,43 +190,23 @@ static esp_err_t modbus_build_serial_config_from_registers(modbus_serial_config_
         return ESP_ERR_INVALID_ARG;
     }
 
-    uint32_t baud = (uint16_t)mb_holding_registers[IDX_MODBUS_BAUD];
+    uint32_t baud = (uint16_t)mb_holding_registers[HOLDING_INDEX(MB_HOLDING_SET_MODBUS_BAUD)];
     uart_parity_t parity;
     uart_stop_bits_t stop_bits;
     uart_word_length_t data_bits;
-    uint32_t slave_id = (uint16_t)mb_holding_registers[IDX_MODBUS_SLAVE_ID];
+    uint8_t slave_id = (uint8_t)mb_holding_registers[HOLDING_INDEX(MB_HOLDING_SET_MODBUS_SLAVE_ID)];
 
-    if (!modbus_is_supported_baud(baud)) {
-        ESP_LOGW(TAG, "Requested baud rate %lu not supported (1200-57600)",
-                 (unsigned long)baud);
-        return ESP_ERR_INVALID_ARG;
-    }
-    if (!modbus_decode_parity((uint16_t)mb_holding_registers[IDX_MODBUS_PARITY], &parity)) {
-        ESP_LOGW(TAG, "Requested parity code %d is invalid",
-                 mb_holding_registers[IDX_MODBUS_PARITY]);
-        return ESP_ERR_INVALID_ARG;
-    }
-    if (!modbus_decode_stop_bits((uint16_t)mb_holding_registers[IDX_MODBUS_STOP_BITS], &stop_bits)) {
-        ESP_LOGW(TAG, "Requested stop bits code %d is invalid",
-                 mb_holding_registers[IDX_MODBUS_STOP_BITS]);
-        return ESP_ERR_INVALID_ARG;
-    }
-    if (!modbus_decode_data_bits((uint16_t)mb_holding_registers[IDX_MODBUS_DATA_BITS], &data_bits)) {
-        ESP_LOGW(TAG, "Requested data bits code %d is invalid",
-                 mb_holding_registers[IDX_MODBUS_DATA_BITS]);
-        return ESP_ERR_INVALID_ARG;
-    }
-    if (!modbus_is_valid_slave_id(slave_id)) {
-        ESP_LOGW(TAG, "Requested Modbus slave id %lu invalid (1-247)",
-                 (unsigned long)slave_id);
-        return ESP_ERR_INVALID_ARG;
-    }
+    // Значения уже проверены при записи в holding-регистры,
+    // здесь просто декодируем их в структуру конфигурации.
+    (void)modbus_decode_parity((uint16_t)mb_holding_registers[HOLDING_INDEX(MB_HOLDING_SET_MODBUS_PARITY)], &parity);
+    (void)modbus_decode_stop_bits((uint16_t)mb_holding_registers[HOLDING_INDEX(MB_HOLDING_SET_MODBUS_STOP_BITS)], &stop_bits);
+    (void)modbus_decode_data_bits((uint16_t)mb_holding_registers[HOLDING_INDEX(MB_HOLDING_SET_MODBUS_DATA_BITS)], &data_bits);
 
     cfg->baudrate = baud;
     cfg->parity = parity;
     cfg->stop_bits = stop_bits;
     cfg->data_bits = data_bits;
-    cfg->slave_addr = (uint8_t)slave_id;
+    cfg->slave_addr = slave_id;
     return ESP_OK;
 }
 
@@ -214,9 +215,9 @@ static esp_err_t modbus_build_serial_config_from_registers(modbus_serial_config_
  * @return ESP_OK on success
  */
 esp_err_t modbus_params_init(void) {
-    // Clear all registers
-    memset(mb_input_registers, 0, sizeof(mb_input_registers));
-    memset(mb_holding_registers, 0, sizeof(mb_holding_registers));
+    // Clear all registers, инициализированы нулями при создании
+    // memset(mb_input_registers, 0, sizeof(mb_input_registers));
+    // memset(mb_holding_registers, 0, sizeof(mb_holding_registers));
 
     modbus_params_sync_serial_registers();
     
@@ -468,73 +469,136 @@ esp_err_t modbus_params_process_holding_write(uint16_t reg_addr) {
             break;
 
         // Modbus serial configuration commands
+        // При записи в эти регистры сразу сохраняем в NVS (применение при следующей перезагрузке)
         case MB_HOLDING_SET_MODBUS_BAUD: {
-            uint32_t baud = (uint16_t)mb_holding_registers[IDX_MODBUS_BAUD];
+            uint32_t baud = (uint16_t)mb_holding_registers[HOLDING_INDEX(MB_HOLDING_SET_MODBUS_BAUD)];
             if (!modbus_is_supported_baud(baud)) {
                 ESP_LOGW(TAG, "Invalid Modbus baud rate request: %lu (1200-57600)", baud);
-                modbus_restore_serial_field(MB_HOLDING_SET_MODBUS_BAUD);
+                mb_holding_registers[HOLDING_INDEX(MB_HOLDING_SET_MODBUS_BAUD)] = (int16_t)(base_serial_cfg.baudrate);
                 ret = ESP_ERR_INVALID_ARG;
+            } else {
+                // Сохраняем в NVS
+                modbus_serial_config_t new_cfg;
+                esp_err_t build_ret = modbus_build_serial_config_from_registers(&new_cfg);
+                if (build_ret == ESP_OK) {
+                    esp_err_t save_ret = modbus_nvs_save_config(&new_cfg);
+                    if (save_ret == ESP_OK) {
+                        ESP_LOGI(TAG, "Modbus baud rate saved to NVS: %lu (will apply after reboot)", (unsigned long)baud);
+                    } else {
+                        ESP_LOGE(TAG, "Failed to save Modbus config to NVS: %s", esp_err_to_name(save_ret));
+                        ret = save_ret;
+                    }
+                } else {
+                    ESP_LOGW(TAG, "Cannot save: other Modbus parameters invalid");
+                    ret = build_ret;
+                }
             }
             break;
         }
 
         case MB_HOLDING_SET_MODBUS_PARITY: {
             uart_parity_t tmp;
-            if (!modbus_decode_parity((uint16_t)mb_holding_registers[IDX_MODBUS_PARITY], &tmp)) {
+            if (!modbus_decode_parity((uint16_t)mb_holding_registers[HOLDING_INDEX(MB_HOLDING_SET_MODBUS_PARITY)], &tmp)) {
                 ESP_LOGW(TAG, "Invalid Modbus parity code: %d",
-                         mb_holding_registers[IDX_MODBUS_PARITY]);
-                modbus_restore_serial_field(MB_HOLDING_SET_MODBUS_PARITY);
+                         mb_holding_registers[HOLDING_INDEX(MB_HOLDING_SET_MODBUS_PARITY)]);
+                         mb_holding_registers[HOLDING_INDEX(MB_HOLDING_SET_MODBUS_PARITY)] = modbus_encode_parity(base_serial_cfg.parity);
                 ret = ESP_ERR_INVALID_ARG;
+            } else {
+                // Сохраняем в NVS
+                modbus_serial_config_t new_cfg;
+                esp_err_t build_ret = modbus_build_serial_config_from_registers(&new_cfg);
+                if (build_ret == ESP_OK) {
+                    esp_err_t save_ret = modbus_nvs_save_config(&new_cfg);
+                    if (save_ret == ESP_OK) {
+                        ESP_LOGI(TAG, "Modbus parity saved to NVS: %d (will apply after reboot)", tmp);
+                    } else {
+                        ESP_LOGE(TAG, "Failed to save Modbus config to NVS: %s", esp_err_to_name(save_ret));
+                        ret = save_ret;
+                    }
+                } else {
+                    ESP_LOGW(TAG, "Cannot save: other Modbus parameters invalid");
+                    ret = build_ret;
+                }
             }
             break;
         }
 
         case MB_HOLDING_SET_MODBUS_STOP_BITS: {
             uart_stop_bits_t tmp;
-            if (!modbus_decode_stop_bits((uint16_t)mb_holding_registers[IDX_MODBUS_STOP_BITS], &tmp)) {
+            if (!modbus_decode_stop_bits((uint16_t)mb_holding_registers[HOLDING_INDEX(MB_HOLDING_SET_MODBUS_STOP_BITS)], &tmp)) {
                 ESP_LOGW(TAG, "Invalid Modbus stop bits code: %d",
-                         mb_holding_registers[IDX_MODBUS_STOP_BITS]);
-                modbus_restore_serial_field(MB_HOLDING_SET_MODBUS_STOP_BITS);
+                         mb_holding_registers[HOLDING_INDEX(MB_HOLDING_SET_MODBUS_STOP_BITS)]);
+                         mb_holding_registers[HOLDING_INDEX(MB_HOLDING_SET_MODBUS_STOP_BITS)] = modbus_encode_stop_bits(base_serial_cfg.stop_bits);
                 ret = ESP_ERR_INVALID_ARG;
+            } else {
+                // Сохраняем в NVS
+                modbus_serial_config_t new_cfg;
+                esp_err_t build_ret = modbus_build_serial_config_from_registers(&new_cfg);
+                if (build_ret == ESP_OK) {
+                    esp_err_t save_ret = modbus_nvs_save_config(&new_cfg);
+                    if (save_ret == ESP_OK) {
+                        ESP_LOGI(TAG, "Modbus stop bits saved to NVS: %d (will apply after reboot)", tmp);
+                    } else {
+                        ESP_LOGE(TAG, "Failed to save Modbus config to NVS: %s", esp_err_to_name(save_ret));
+                        ret = save_ret;
+                    }
+                } else {
+                    ESP_LOGW(TAG, "Cannot save: other Modbus parameters invalid");
+                    ret = build_ret;
+                }
             }
             break;
         }
 
         case MB_HOLDING_SET_MODBUS_DATA_BITS: {
             uart_word_length_t tmp;
-            if (!modbus_decode_data_bits((uint16_t)mb_holding_registers[IDX_MODBUS_DATA_BITS], &tmp)) {
+            if (!modbus_decode_data_bits((uint16_t)mb_holding_registers[HOLDING_INDEX(MB_HOLDING_SET_MODBUS_DATA_BITS)], &tmp)) {
                 ESP_LOGW(TAG, "Invalid Modbus data bits code: %d",
-                         mb_holding_registers[IDX_MODBUS_DATA_BITS]);
-                modbus_restore_serial_field(MB_HOLDING_SET_MODBUS_DATA_BITS);
+                         mb_holding_registers[HOLDING_INDEX(MB_HOLDING_SET_MODBUS_DATA_BITS)]);
+                         mb_holding_registers[HOLDING_INDEX(MB_HOLDING_SET_MODBUS_DATA_BITS)] = modbus_encode_data_bits(base_serial_cfg.data_bits);
                 ret = ESP_ERR_INVALID_ARG;
+            } else {
+                // Сохраняем в NVS
+                modbus_serial_config_t new_cfg;
+                esp_err_t build_ret = modbus_build_serial_config_from_registers(&new_cfg);
+                if (build_ret == ESP_OK) {
+                    esp_err_t save_ret = modbus_nvs_save_config(&new_cfg);
+                    if (save_ret == ESP_OK) {
+                        ESP_LOGI(TAG, "Modbus data bits saved to NVS: %d (will apply after reboot)", tmp);
+                    } else {
+                        ESP_LOGE(TAG, "Failed to save Modbus config to NVS: %s", esp_err_to_name(save_ret));
+                        ret = save_ret;
+                    }
+                } else {
+                    ESP_LOGW(TAG, "Cannot save: other Modbus parameters invalid");
+                    ret = build_ret;
+                }
             }
             break;
         }
 
         case MB_HOLDING_SET_MODBUS_SLAVE_ID: {
-            uint32_t slave_id = (uint16_t)mb_holding_registers[IDX_MODBUS_SLAVE_ID];
+            uint32_t slave_id = (uint16_t)mb_holding_registers[HOLDING_INDEX(MB_HOLDING_SET_MODBUS_SLAVE_ID)];
             if (!modbus_is_valid_slave_id(slave_id)) {
                 ESP_LOGW(TAG, "Invalid Modbus slave id: %lu (1-247)", (unsigned long)slave_id);
-                modbus_restore_serial_field(MB_HOLDING_SET_MODBUS_SLAVE_ID);
+                mb_holding_registers[HOLDING_INDEX(MB_HOLDING_SET_MODBUS_SLAVE_ID)] = (int16_t)(base_serial_cfg.slave_addr);
                 ret = ESP_ERR_INVALID_ARG;
-            }
-            break;
-        }
-
-        case MB_HOLDING_APPLY_MODBUS_SETTINGS: {
-            if (value == 0) {
-                ESP_LOGI(TAG, "Modbus settings apply requested with 0, ignoring");
-                break;
-            }
-            modbus_serial_config_t new_cfg;
-            esp_err_t build_ret = modbus_build_serial_config_from_registers(&new_cfg);
-            if (build_ret != ESP_OK) {
-                ret = build_ret;
-                break;
-            }
-            ret = modbus_slave_apply_serial_config(&new_cfg);
-            if (ret == ESP_OK) {
-                modbus_params_sync_serial_registers();
+            } else {
+                // Сохраняем в NVS
+                modbus_serial_config_t new_cfg;
+                esp_err_t build_ret = modbus_build_serial_config_from_registers(&new_cfg);
+                if (build_ret == ESP_OK) {
+                    esp_err_t save_ret = modbus_nvs_save_config(&new_cfg);
+                    if (save_ret == ESP_OK) {
+                        ESP_LOGI(TAG, "Modbus slave ID saved to NVS: %lu (will apply after reboot)", (unsigned long)slave_id);
+                    } else {
+                        ESP_LOGE(TAG, "Failed to save Modbus config to NVS: %s", esp_err_to_name(save_ret));
+                        ret = save_ret;
+                    }
+                } else {
+                    ESP_LOGW(TAG, "Cannot save: other Modbus parameters invalid");
+                    ret = build_ret;
+                }
             }
             break;
         }

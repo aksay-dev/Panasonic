@@ -8,12 +8,25 @@
 #include "include/hpc.h"
 #include "esp_log.h"
 #include "esp_system.h"
+#include "driver/gpio.h"
+#include "freertos/FreeRTOS.h"
+#include "freertos/task.h"
 #include "include/protocol.h"
 #include "include/modbus_slave.h"
+#include "include/modbus_params.h"
+#include "include/nvs_hp.h"
 
 // test_decoder disabled
 
 static const char *TAG = "HPC";
+
+// Factory reset button
+static bool reset_button_ready = false;
+static TickType_t reset_press_start = 0;
+static bool reset_action_performed = false;
+
+#define HPC_RESET_BUTTON_GPIO   GPIO_NUM_0
+#define HPC_RESET_HOLD_TICKS    pdMS_TO_TICKS(4000)
 
 /**
  * @brief Initialize HPC application
@@ -35,6 +48,9 @@ esp_err_t hpc_init(void) {
         ESP_LOGE(TAG, "Failed to initialize Modbus slave: %s", esp_err_to_name(ret));
         return ret;
     }
+
+    // Initialize factory reset button
+    hpc_factory_reset_button_init();
 
     return ESP_OK;
 }
@@ -61,6 +77,105 @@ esp_err_t hpc_start(void) {
     }
 
     return ESP_OK;
+}
+
+/**
+ * @brief Apply factory default Modbus settings (9600 8N1, slave ID 7)
+ *
+ * По требованию: контроллер не пересоздаем, только записываем
+ * заводские параметры в NVS, чтобы они вступили в силу при
+ * следующей перезагрузке.
+ */
+static void hpc_apply_factory_defaults(void) {
+    modbus_serial_config_t default_cfg = {
+        .baudrate = MB_DEV_SPEED,
+        .parity = UART_PARITY_DISABLE,
+        .stop_bits = UART_STOP_BITS_1,
+        .data_bits = UART_DATA_8_BITS,
+        .slave_addr = MB_SLAVE_ADDR
+    };
+    
+    ESP_LOGI(TAG, "Factory reset: saving default Modbus settings (9600 8N1, slave=%d) to NVS", MB_SLAVE_ADDR);
+    
+    // Сохраняем дефолтные параметры Modbus в NVS
+    esp_err_t ret = modbus_nvs_save_config(&default_cfg);
+    if (ret != ESP_OK) {
+        ESP_LOGE(TAG, "Failed to save factory Modbus settings to NVS: %s", esp_err_to_name(ret));
+        return;
+    }
+
+    // Сбрасываем флаг опционной платы в 0 и сохраняем в NVS
+    int32_t opt_index = MB_HOLDING_OPT_PCB_AVAILABLE - MB_REG_HOLDING_START;
+    if (opt_index >= 0 && opt_index < MB_REG_HOLDING_COUNT) {
+        mb_holding_registers[opt_index] = 0;
+    }
+    
+    esp_err_t save_ret = modbus_nvs_save_opt_pcb(0);
+    if (save_ret != ESP_OK) {
+        ESP_LOGE(TAG, "Failed to reset OPT_PCB flag in NVS: %s", esp_err_to_name(save_ret));
+    } else {
+        ESP_LOGI(TAG, "OPT_PCB flag reset to factory default");
+    }
+    
+    ESP_LOGI(TAG, "Factory Modbus settings saved to NVS (will apply after reboot)");
+}
+
+/**
+ * @brief Initialize factory reset button (BOOT button)
+ */
+void hpc_factory_reset_button_init(void) {
+    gpio_config_t io_conf = {
+        .pin_bit_mask = 1ULL << HPC_RESET_BUTTON_GPIO,
+        .mode = GPIO_MODE_INPUT,
+        .pull_up_en = GPIO_PULLUP_ENABLE,
+        .pull_down_en = GPIO_PULLDOWN_DISABLE,
+        .intr_type = GPIO_INTR_DISABLE
+    };
+    esp_err_t err = gpio_config(&io_conf);
+    if (err == ESP_OK) {
+        reset_button_ready = true;
+        reset_press_start = 0;
+        reset_action_performed = false;
+        ESP_LOGI(TAG, "Factory reset button initialized on GPIO%d", HPC_RESET_BUTTON_GPIO);
+    } else {
+        reset_button_ready = false;
+        ESP_LOGE(TAG, "Failed to configure factory reset button: %s", esp_err_to_name(err));
+    }
+}
+
+/**
+ * @brief Poll factory reset button (BOOT button)
+ * Must be called periodically (e.g., every 100ms)
+ */
+void hpc_factory_reset_button_poll(void) {
+    if (!reset_button_ready) {
+        return;
+    }
+
+    int level = gpio_get_level(HPC_RESET_BUTTON_GPIO);
+    TickType_t now = xTaskGetTickCount();
+
+    if (level == 0) { // button pressed (active low)
+        if (reset_press_start == 0) {
+            reset_press_start = now;
+            reset_action_performed = false;
+            ESP_LOGI(TAG, "Factory reset button pressed");
+        } else if (!reset_action_performed) {
+            TickType_t hold_time = now - reset_press_start;
+            if (hold_time >= HPC_RESET_HOLD_TICKS) {
+                ESP_LOGI(TAG, "Factory reset button held for 4 seconds, applying defaults");
+                hpc_apply_factory_defaults();
+                reset_action_performed = true;
+            }
+        }
+    } else {
+        if (reset_press_start != 0 && !reset_action_performed) {
+            TickType_t hold_time = now - reset_press_start;
+            ESP_LOGI(TAG, "Factory reset button released after %lu ms", pdTICKS_TO_MS(hold_time));
+        }
+        reset_press_start = 0;
+        reset_action_performed = false;
+    }
 }
 
 /*
@@ -94,8 +209,9 @@ void app_restart() {
 
     ESP_LOGI(TAG, "HPC application version %s started successfully", HPC_VERSION_STRING);
 
-    // Keep main task alive
+    // Main loop - poll factory reset button
     while (1) {
-        vTaskDelay(pdMS_TO_TICKS(1000));
+        hpc_factory_reset_button_poll();
+        vTaskDelay(pdMS_TO_TICKS(100));
     }
 }

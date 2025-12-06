@@ -33,6 +33,8 @@ typedef struct {
 extern "C" {
 #endif
 
+extern modbus_serial_config_t base_serial_cfg;
+
 /**
  * @brief Initialize Modbus RTU slave
  * @return ESP_OK on success
@@ -46,18 +48,18 @@ esp_err_t modbus_slave_init(void);
 esp_err_t modbus_slave_start(void);
 
 /**
- * @brief Apply a new Modbus serial configuration (baud rate, frame, slave ID)
- * @param cfg Pointer to configuration structure
- * @return ESP_OK on success
- */
-esp_err_t modbus_slave_apply_serial_config(const modbus_serial_config_t *cfg);
-
-/**
  * @brief Get current Modbus serial configuration
  * @param cfg_out Output pointer
  * @return ESP_OK on success
  */
 esp_err_t modbus_slave_get_serial_config(modbus_serial_config_t *cfg_out);
+
+/**
+ * @brief Update shadow copy of holding registers
+ * Should be called after syncing holding registers from input registers
+ * to prevent false change detection
+ */
+void modbus_slave_update_shadow_copy(void);
 
 #ifdef __cplusplus
 }
