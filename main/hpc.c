@@ -17,6 +17,8 @@
 #include "include/nvs_hp.h"
 #include "include/mqtt_pub.h"
 #include "include/wifi_connect.h"
+#include "include/adc.h"
+#include "include/ds18b20a.h"
 
 // test_decoder disabled
 
@@ -61,6 +63,20 @@ esp_err_t hpc_init(void) {
     // Initialize factory reset button
     hpc_factory_reset_button_init();
 
+    // Initialize ADC module
+    ret = adc_init();
+    if (ret != ESP_OK) {
+        ESP_LOGW(TAG, "Failed to initialize ADC: %s (continuing without ADC)", esp_err_to_name(ret));
+        // Don't fail initialization if ADC fails - it's optional
+    }
+
+    // Initialize DS18B20 sensor
+    ret = ds18b20_init();
+    if (ret != ESP_OK) {
+        ESP_LOGW(TAG, "Failed to initialize DS18B20: %s (continuing without DS18B20)", esp_err_to_name(ret));
+        // Don't fail initialization if DS18B20 fails - it's optional
+    }
+
     // Initialize MQTT client (will connect when WiFi is ready)
     ret = mqtt_client_init();
     if (ret != ESP_OK) {
@@ -102,6 +118,24 @@ esp_err_t hpc_start(void) {
     if (ret != ESP_OK) {
         ESP_LOGE(TAG, "Failed to start Modbus slave: %s", esp_err_to_name(ret));
         return ret;
+    }
+
+    // Start ADC reading task
+    ret = adc_start();
+    if (ret != ESP_OK) {
+        ESP_LOGW(TAG, "Failed to start ADC: %s (continuing without ADC)", esp_err_to_name(ret));
+        // Don't fail start if ADC fails - it's optional
+    } else {
+        ESP_LOGI(TAG, "ADC started successfully");
+    }
+
+    // Start DS18B20 reading task
+    ret = ds18b20_start();
+    if (ret != ESP_OK) {
+        ESP_LOGW(TAG, "Failed to start DS18B20: %s (continuing without DS18B20)", esp_err_to_name(ret));
+        // Don't fail start if DS18B20 fails - it's optional
+    } else {
+        ESP_LOGI(TAG, "DS18B20 started successfully");
     }
 
     // Start MQTT client (only if WiFi is connected)

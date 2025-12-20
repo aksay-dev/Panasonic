@@ -329,8 +329,16 @@ extern "C" {
 #define MB_INPUT_ERROR_TYPE_CPY         0x018D
 #define MB_INPUT_ERROR_NUMBER_CPY       0x018E
 
+// ADC analog inputs (0x0190-0x0192)
+#define MB_INPUT_ADC_AIN                0x0190  // GPIO32
+#define MB_INPUT_ADC_NTC1               0x0191  // GPIO34
+#define MB_INPUT_ADC_NTC2               0x0192  // GPIO35
+
+// DS18B20 temperature sensor (0x0193)
+#define MB_INPUT_DS18B20_TEMP           0x0193  // GPIO22, temperature in °C * 100
+
 // Total input registers
-#define MB_REG_INPUT_COUNT             0x0190  // 400 registers (0x0000-0x018F)
+#define MB_REG_INPUT_COUNT             0x0194  // 404 registers (0x0000-0x0193)
 
 // ============================================================================
 // HOLDING REGISTERS (Read/Write) - 0x1000-0x103F
