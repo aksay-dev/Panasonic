@@ -418,10 +418,11 @@ extern "C" {
 #define MB_HOLDING_SET_MODBUS_SLAVE_ID      0x1084  // 1-247
 
 #define MB_HOLDING_OPT_PCB_AVAILABLE        0x1090  // == 1 - Есть опциональная плата, включить обработку
+#define MB_HOLDING_SET_MQTT_PUBLISH         0x1091  // 1= включить публикацию в MQTT
 
 // Update total count to cover up to last defined register (0x1090)
-// Need at least 0x91 (145) registers, using 0xB0 (176) for safety margin
-#define MB_REG_HOLDING_COUNT            0x00B0  // covers 0x1000-0x10AF (176 registers)
+// Using 0xA0 (160) for safety margin
+#define MB_REG_HOLDING_COUNT            0x00A0  // covers 0x1000-0x109F (160 registers)
 
 // ============================================================================
 // Register data structures

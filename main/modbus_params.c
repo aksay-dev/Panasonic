@@ -619,6 +619,22 @@ esp_err_t modbus_params_process_holding_write(uint16_t reg_addr) {
             break;
         }
 
+        case MB_HOLDING_SET_MQTT_PUBLISH: {
+            // Store value (0 or 1) - controls MQTT publishing
+            if (value != 0 && value != 1) {
+                ESP_LOGW(TAG, "Invalid MQTT_PUBLISH value: %d (must be 0 or 1)", value);
+                ret = ESP_ERR_INVALID_ARG;
+            } else {
+                ESP_LOGI(TAG, "MQTT_PUBLISH set to %d", value);
+                esp_err_t save_ret = modbus_nvs_save_mqtt_publish((uint8_t)value);
+                if (save_ret != ESP_OK) {
+                    ESP_LOGE(TAG, "Failed to save MQTT publish flag to NVS: %s", esp_err_to_name(save_ret));
+                    ret = save_ret;
+                }
+            }
+            break;
+        }
+
         default:
             ESP_LOGW(TAG, "Write to unhandled register: 0x%04X", reg_addr);
             ret = ESP_ERR_NOT_SUPPORTED;

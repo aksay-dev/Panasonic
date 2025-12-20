@@ -1,4 +1,5 @@
 ## IDF Component Manager Manifest File
 dependencies:
   espressif/esp-modbus: "^2.0.0"
+  espressif/mqtt: "*"
 

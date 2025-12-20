@@ -15,6 +15,8 @@
 #include "include/modbus_slave.h"
 #include "include/modbus_params.h"
 #include "include/nvs_hp.h"
+#include "include/mqtt_pub.h"
+#include "include/wifi_connect.h"
 
 // test_decoder disabled
 
@@ -35,6 +37,13 @@ static bool reset_action_performed = false;
 esp_err_t hpc_init(void) {
     esp_err_t ret;
     
+    // Initialize WiFi first (required for MQTT)
+    ret = wifi_connect_init();
+    if (ret != ESP_OK) {
+        ESP_LOGE(TAG, "Failed to initialize WiFi: %s", esp_err_to_name(ret));
+        return ret;
+    }
+
     // Initialize heat pump protocol
     ret = protocol_init();
     if (ret != ESP_OK) {
@@ -52,6 +61,13 @@ esp_err_t hpc_init(void) {
     // Initialize factory reset button
     hpc_factory_reset_button_init();
 
+    // Initialize MQTT client (will connect when WiFi is ready)
+    ret = mqtt_client_init();
+    if (ret != ESP_OK) {
+        ESP_LOGW(TAG, "Failed to initialize MQTT client: %s (continuing without MQTT)", esp_err_to_name(ret));
+        // Don't fail initialization if MQTT fails - it's optional
+    }
+
     return ESP_OK;
 }
 
@@ -61,6 +77,18 @@ esp_err_t hpc_init(void) {
  */
 esp_err_t hpc_start(void) {
     esp_err_t ret;
+    
+    // Start WiFi connection first (required for MQTT)
+    ret = wifi_connect_start();
+    if (ret != ESP_OK) {
+        ESP_LOGW(TAG, "Failed to start WiFi: %s (MQTT will not work)", esp_err_to_name(ret));
+        // Continue anyway - WiFi/MQTT are optional
+    } else {
+        char ip_str[16];
+        if (wifi_connect_get_ip(ip_str, sizeof(ip_str)) == ESP_OK) {
+            ESP_LOGI(TAG, "WiFi connected, IP: %s", ip_str);
+        }
+    }
     
     // Start heat pump protocol
     ret = protocol_start();
@@ -74,6 +102,17 @@ esp_err_t hpc_start(void) {
     if (ret != ESP_OK) {
         ESP_LOGE(TAG, "Failed to start Modbus slave: %s", esp_err_to_name(ret));
         return ret;
+    }
+
+    // Start MQTT client (only if WiFi is connected)
+    if (wifi_connect_is_connected()) {
+        ret = mqtt_client_start();
+        if (ret != ESP_OK) {
+            ESP_LOGW(TAG, "Failed to start MQTT client: %s (continuing without MQTT)", esp_err_to_name(ret));
+            // Don't fail start if MQTT fails - it's optional
+        }
+    } else {
+        ESP_LOGW(TAG, "WiFi not connected, skipping MQTT start");
     }
 
     return ESP_OK;

@@ -9,6 +9,7 @@
 #include "decoder.h"
 #include "modbus_params.h"
 #include "modbus_slave.h"
+#include "include/mqtt_pub.h"
 #include "esp_log.h"
 #include "driver/uart.h"
 #include "freertos/task.h"
@@ -191,6 +192,19 @@ static esp_err_t protocol_process_received_data(const uint8_t *data, size_t size
             modbus_slave_update_shadow_copy();
             // Log main data
             // log_main_data();
+            
+            // Publish to MQTT if enabled and connected
+            if (mqtt_client_is_connected()) {
+                // Check if MQTT publishing is enabled via Modbus register
+                int32_t mqtt_index = MB_HOLDING_SET_MQTT_PUBLISH - MB_REG_HOLDING_START;
+                bool publish_enabled = false;
+                if (mqtt_index >= 0 && mqtt_index < MB_REG_HOLDING_COUNT) {
+                    publish_enabled = (mb_holding_registers[mqtt_index] != 0);
+                }
+                if (publish_enabled) {
+                    mqtt_client_publish_data();
+                }
+            }
         } else {
             ESP_LOGE(TAG, "Failed to decode main data: %s", esp_err_to_name(decode_ret));
         }

@@ -14,6 +14,7 @@ static bool nvs_ready = false;
 #define MODBUS_NVS_KEY_DATA_BITS   "data"
 #define MODBUS_NVS_KEY_SLAVE_ID    "slave"
 #define MODBUS_NVS_KEY_OPT_PCB     "opt_pcb"
+#define MODBUS_NVS_KEY_MQTT_PUBLISH "mqtt_pub"
 
 esp_err_t modbus_nvs_init(void) {
     if (nvs_ready) {
@@ -178,6 +179,56 @@ esp_err_t modbus_nvs_save_opt_pcb(uint8_t value) {
     }
     if (err != ESP_OK) {
         ESP_LOGE(TAG, "Failed to persist OPT_PCB flag: %s", esp_err_to_name(err));
+    }
+    nvs_close(handle);
+    return err;
+}
+
+esp_err_t modbus_nvs_load_mqtt_publish(uint8_t *value) {
+    if (value == NULL) {
+        return ESP_ERR_INVALID_ARG;
+    }
+
+    esp_err_t err = modbus_nvs_init();
+    if (err != ESP_OK) {
+        return err;
+    }
+
+    nvs_handle_t handle;
+    err = nvs_open(MODBUS_NVS_NAMESPACE, NVS_READONLY, &handle);
+    if (err != ESP_OK) {
+        return (err == ESP_ERR_NVS_NOT_FOUND) ? ESP_ERR_NOT_FOUND : err;
+    }
+
+    err = nvs_get_u8(handle, MODBUS_NVS_KEY_MQTT_PUBLISH, value);
+    nvs_close(handle);
+    if (err == ESP_ERR_NVS_NOT_FOUND) {
+        err = ESP_ERR_NOT_FOUND;
+    }
+    return err;
+}
+
+esp_err_t modbus_nvs_save_mqtt_publish(uint8_t value) {
+    value = value ? 1 : 0;
+
+    esp_err_t err = modbus_nvs_init();
+    if (err != ESP_OK) {
+        return err;
+    }
+
+    nvs_handle_t handle;
+    err = nvs_open(MODBUS_NVS_NAMESPACE, NVS_READWRITE, &handle);
+    if (err != ESP_OK) {
+        ESP_LOGE(TAG, "Failed to open NVS namespace '%s': %s", MODBUS_NVS_NAMESPACE, esp_err_to_name(err));
+        return err;
+    }
+
+    err = nvs_set_u8(handle, MODBUS_NVS_KEY_MQTT_PUBLISH, value);
+    if (err == ESP_OK) {
+        err = nvs_commit(handle);
+    }
+    if (err != ESP_OK) {
+        ESP_LOGE(TAG, "Failed to persist MQTT publish flag: %s", esp_err_to_name(err));
     }
     nvs_close(handle);
     return err;

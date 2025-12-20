@@ -301,6 +301,23 @@ esp_err_t modbus_slave_init(void) {
     if (opt_index >= 0 && opt_index < MB_REG_HOLDING_COUNT) {
         mb_holding_registers[opt_index] = (int16_t)(opt_pcb_flag ? 1 : 0);
     }
+
+    // Restore MQTT publish flag from NVS (default 0)
+    uint8_t mqtt_publish_flag = 0;
+    esp_err_t mqtt_load_ret = modbus_nvs_load_mqtt_publish(&mqtt_publish_flag);
+    if (mqtt_load_ret == ESP_OK) {
+        ESP_LOGI(TAG, "Loaded MQTT publish flag from NVS: %u", mqtt_publish_flag);
+    } else if (mqtt_load_ret == ESP_ERR_NOT_FOUND) {
+        ESP_LOGI(TAG, "No MQTT publish flag stored in NVS, using default 0");
+        mqtt_publish_flag = 0;
+    } else {
+        ESP_LOGW(TAG, "Failed to load MQTT publish flag from NVS: %s", esp_err_to_name(mqtt_load_ret));
+        mqtt_publish_flag = 0;
+    }
+    int32_t mqtt_index = MB_HOLDING_SET_MQTT_PUBLISH - MB_REG_HOLDING_START;
+    if (mqtt_index >= 0 && mqtt_index < MB_REG_HOLDING_COUNT) {
+        mb_holding_registers[mqtt_index] = (int16_t)(mqtt_publish_flag ? 1 : 0);
+    }
     
     // Setup Modbus controller
     ret = modbus_slave_setup_controller();
