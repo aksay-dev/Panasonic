@@ -46,6 +46,12 @@ bool mqtt_client_is_connected(void);
  */
 esp_err_t mqtt_client_publish_data(void);
 
+typedef struct {
+    uint16_t reg_addr;
+    const char *name;
+    const char *subtopic;
+} mqtt_name_t;
+
 #ifdef __cplusplus
 }
 #endif

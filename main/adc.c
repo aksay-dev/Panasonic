@@ -9,7 +9,7 @@
 #include "include/modbus_params.h"
 #include "esp_log.h"
 #include "esp_err.h"
-#include "driver/adc.h"
+#include "esp_adc/adc_oneshot.h"
 #include "hal/adc_types.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
@@ -30,19 +30,22 @@ typedef struct {
 
 // ADC channel configuration
 typedef struct {
-    adc1_channel_t channel;  // ADC1 channel number
+    adc_ch_t channel;        // ADC1 channel number
     uint8_t gpio;             // GPIO pin number
     adc_filter_t filter;      // Moving average filter
     uint16_t raw_value;       // Last raw reading
     uint16_t filtered_value;  // Last filtered value
-} adc_channel_t;
+} adc_channel_state_t;
 
 // ADC channels configuration
-static adc_channel_t adc_channels[ADC_CHANNEL_COUNT] = {
-    {.channel = ADC1_CHANNEL_4, .gpio = ADC_CH0_GPIO},  // GPIO32 -> ADC1_CH4
-    {.channel = ADC1_CHANNEL_6, .gpio = ADC_CH1_GPIO},  // GPIO34 -> ADC1_CH6
-    {.channel = ADC1_CHANNEL_7, .gpio = ADC_CH2_GPIO}, // GPIO35 -> ADC1_CH7
+static adc_channel_state_t adc_channels[ADC_CHANNEL_COUNT] = {
+    {.channel = ADC_CHANNEL_4, .gpio = ADC_CH0_GPIO},  // GPIO32 -> ADC1_CH4
+    {.channel = ADC_CHANNEL_6, .gpio = ADC_CH1_GPIO},  // GPIO34 -> ADC1_CH6
+    {.channel = ADC_CHANNEL_7, .gpio = ADC_CH2_GPIO}, // GPIO35 -> ADC1_CH7
 };
+
+// ADC oneshot unit handle
+static adc_oneshot_unit_handle_t adc1_handle = NULL;
 
 // Task handle
 static TaskHandle_t adc_task_handle = NULL;
@@ -110,11 +113,18 @@ static uint16_t adc_read_channel(uint8_t channel_idx) {
         return 0;
     }
     
-    adc_channel_t *ch = &adc_channels[channel_idx];
+    if (adc1_handle == NULL) {
+        ESP_LOGE(TAG, "ADC unit not initialized");
+        return 0;
+    }
     
-    int adc_value = adc1_get_raw(ch->channel);
-    if (adc_value < 0) {
-        ESP_LOGE(TAG, "Failed to read ADC channel %d (GPIO%d)", channel_idx, ch->gpio);
+    adc_channel_state_t *ch = &adc_channels[channel_idx];
+    
+    int adc_value = 0;
+    esp_err_t ret = adc_oneshot_read(adc1_handle, ch->channel, &adc_value);
+    if (ret != ESP_OK) {
+        ESP_LOGE(TAG, "Failed to read ADC channel %d (GPIO%d): %s", 
+                 channel_idx, ch->gpio, esp_err_to_name(ret));
         return 0;
     }
     
@@ -264,17 +274,46 @@ esp_err_t adc_init(void) {
     ESP_LOGI(TAG, "Initializing ADC on GPIO%d, GPIO%d, GPIO%d", 
              ADC_CH0_GPIO, ADC_CH1_GPIO, ADC_CH2_GPIO);
     
-    // Configure ADC1 with 12-bit resolution
-    esp_err_t ret = adc1_config_width(ADC_WIDTH_BIT_12);
+    // Configure ADC1 unit
+    adc_oneshot_unit_init_cfg_t init_config = {
+        .unit_id = ADC_UNIT_1,
+        .ulp_mode = ADC_ULP_MODE_DISABLE,
+    };
+    esp_err_t ret = adc_oneshot_new_unit(&init_config, &adc1_handle);
     if (ret != ESP_OK) {
-        ESP_LOGE(TAG, "Failed to configure ADC width: %s", esp_err_to_name(ret));
+        ESP_LOGE(TAG, "Failed to initialize ADC unit: %s", esp_err_to_name(ret));
         return ret;
     }
     
-    // Configure attenuation for all channels (11dB attenuation, 0-3.3V range)
-    adc1_config_channel_atten(ADC1_CHANNEL_4, ADC_ATTEN_DB_11);  // GPIO32
-    adc1_config_channel_atten(ADC1_CHANNEL_6, ADC_ATTEN_DB_11);  // GPIO34
-    adc1_config_channel_atten(ADC1_CHANNEL_7, ADC_ATTEN_DB_11);  // GPIO35
+    // Configure channels with 12-bit resolution and 11dB attenuation (0-3.3V range)
+    adc_oneshot_chan_cfg_t config = {
+        .bitwidth = ADC_BITWIDTH_12,
+        .atten = ADC_ATTEN_DB_12,
+    };
+    
+    ret = adc_oneshot_config_channel(adc1_handle, ADC_CHANNEL_4, &config);  // GPIO32
+    if (ret != ESP_OK) {
+        ESP_LOGE(TAG, "Failed to configure ADC channel 4: %s", esp_err_to_name(ret));
+        adc_oneshot_del_unit(adc1_handle);
+        adc1_handle = NULL;
+        return ret;
+    }
+    
+    ret = adc_oneshot_config_channel(adc1_handle, ADC_CHANNEL_6, &config);  // GPIO34
+    if (ret != ESP_OK) {
+        ESP_LOGE(TAG, "Failed to configure ADC channel 6: %s", esp_err_to_name(ret));
+        adc_oneshot_del_unit(adc1_handle);
+        adc1_handle = NULL;
+        return ret;
+    }
+    
+    ret = adc_oneshot_config_channel(adc1_handle, ADC_CHANNEL_7, &config);  // GPIO35
+    if (ret != ESP_OK) {
+        ESP_LOGE(TAG, "Failed to configure ADC channel 7: %s", esp_err_to_name(ret));
+        adc_oneshot_del_unit(adc1_handle);
+        adc1_handle = NULL;
+        return ret;
+    }
     
     // Initialize filters
     for (uint8_t i = 0; i < ADC_CHANNEL_COUNT; i++) {
@@ -326,13 +365,17 @@ esp_err_t adc_start(void) {
  * @brief Stop ADC reading task
  */
 esp_err_t adc_stop(void) {
-    if (adc_task_handle == NULL) {
-        return ESP_OK;
+    if (adc_task_handle != NULL) {
+        vTaskDelete(adc_task_handle);
+        adc_task_handle = NULL;
     }
     
-    vTaskDelete(adc_task_handle);
-    adc_task_handle = NULL;
+    if (adc1_handle != NULL) {
+        adc_oneshot_del_unit(adc1_handle);
+        adc1_handle = NULL;
+    }
     
+    adc_initialized = false;
     ESP_LOGI(TAG, "ADC task stopped");
     return ESP_OK;
 }

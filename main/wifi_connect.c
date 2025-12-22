@@ -19,6 +19,7 @@
 #include "freertos/event_groups.h"
 #include <string.h>
 #include <stdio.h>
+#include "project_config.h"
 
 static const char *TAG = "WIFI_CONNECT";
 
@@ -137,7 +138,7 @@ esp_err_t wifi_connect_start(void) {
     wifi_credentials_t credentials;
     esp_err_t ret = wifi_connect_load_config(&credentials);
     if (ret == ESP_ERR_NOT_FOUND) {
-        ESP_LOGW(TAG, "WiFi credentials not found in NVS, using defaults from project_config.h");
+        ESP_LOGI(TAG, "WiFi credentials not found in NVS, using defaults from project_config.h");
         // Use default credentials from project_config.h (can be changed via Modbus later)
         strncpy(credentials.ssid, CONFIG_WIFI_SSID_DEFAULT, sizeof(credentials.ssid) - 1);
         strncpy(credentials.password, CONFIG_WIFI_PASSWORD_DEFAULT, sizeof(credentials.password) - 1);
@@ -168,7 +169,7 @@ esp_err_t wifi_connect_start(void) {
                                             WIFI_CONNECTED_BIT | WIFI_FAIL_BIT,
                                             pdFALSE,
                                             pdFALSE,
-                                            pdMS_TO_TICKS(30000));
+                                            pdMS_TO_TICKS(CONFIG_WIFI_RECONNECT));
 
     if (bits & WIFI_CONNECTED_BIT) {
         ESP_LOGI(TAG, "WiFi connected successfully");

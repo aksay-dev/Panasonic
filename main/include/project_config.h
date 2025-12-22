@@ -30,6 +30,7 @@ extern "C" {
  * Can be changed via NVS or Modbus register
  */
 #define CONFIG_WIFI_PASSWORD_DEFAULT "boss29586"
+#define CONFIG_WIFI_RECONNECT 30000
 
 // ============================================================================
 // MQTT Configuration
