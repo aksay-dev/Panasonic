@@ -33,19 +33,21 @@ static bool mqtt_connected = false;
 #define MQTT_TOPIC_BASE CONFIG_MQTT_TOPIC_BASE_DEFAULT
 #define MQTT_CLIENT_ID_MAX_LEN CONFIG_MQTT_CLIENT_ID_MAX_LEN
 
-#define MQTT_SUB_SYS "sys"
-#define MQTT_SUB_TEMP "temp"
-#define MQTT_SUB_FLOW "flow"
-#define MQTT_SUB_STATE "state"
-#define MQTT_SUB_POWER "power"
-#define MQTT_SUB_FREQ "freq"
-#define MQTT_SUB_HOUR "hour"
-#define MQTT_SUB_COUNT "count"
-#define MQTT_SUB_SPEED "speed"
-#define MQTT_SUB_PRESS "press"
-#define MQTT_SUB_CURRENT "current"
-#define MQTT_SUB_DUTY "duty"
-#define MQTT_SUB_ERROR "error"
+static const char *mqtt_subtopics[] = {
+    "sys",
+    "temp",
+    "flow",
+    "state",
+    "power",
+    "freq",
+    "hour",
+    "count",
+    "speed",
+    "press",
+    "current",
+    "duty",
+    "error"
+};
 
 static const mqtt_name_t mqtt_names[] = {
     {MB_INPUT_STATUS, "status", MQTT_SUB_SYS},
@@ -98,12 +100,12 @@ static const mqtt_name_t mqtt_names[] = {
     {MB_INPUT_LOW_PRESSURE, "low", MQTT_SUB_PRESS},
     {MB_INPUT_COMPRESSOR_CURRENT, "compressor", MQTT_SUB_CURRENT},
     {MB_INPUT_PUMP_DUTY, "pump", MQTT_SUB_DUTY},
-    {MB_INPUT_MAX_PUMP_DUTY, "max_pump", MQTT_SUB_SYS},
+    {MB_INPUT_MAX_PUMP_DUTY, "max_pump", MQTT_SUB_DUTY},
     {MB_INPUT_HEATPUMP_STATE, "heatpump_state", MQTT_SUB_STATE},
     {MB_INPUT_FORCE_DHW_STATE, "force_dhw", MQTT_SUB_STATE},
     {MB_INPUT_OPERATING_MODE_STATE, "operating", MQTT_SUB_STATE},
     {MB_INPUT_QUIET_MODE_SCHEDULE, "quiet_schedule", MQTT_SUB_STATE},
-    {MB_INPUT_POWERFUL_MODE_TIME, "powerful_time", MQTT_SUB_HOUR},
+    {MB_INPUT_POWERFUL_MODE_TIME, "powerful_time", MQTT_SUB_STATE},
     {MB_INPUT_QUIET_MODE_LEVEL, "quiet_level", MQTT_SUB_STATE},
     {MB_INPUT_HOLIDAY_MODE_STATE, "holiday", MQTT_SUB_STATE},
     {MB_INPUT_THREE_WAY_VALVE_STATE, "three_way_valve", MQTT_SUB_STATE},
@@ -135,7 +137,7 @@ static const mqtt_name_t mqtt_names[] = {
     {MB_INPUT_SOLAR_MODE, "solar", MQTT_SUB_STATE},
     {MB_INPUT_SOLAR_ON_DELTA, "solar_on_delta", MQTT_SUB_TEMP},
     {MB_INPUT_SOLAR_OFF_DELTA, "solar_off_delta", MQTT_SUB_TEMP},
-    {MB_INPUT_SOLAR_FROST_PROTECTION, "solar_frost_protection", MQTT_SUB_TEMP},
+    {MB_INPUT_SOLAR_FROST_PROTECTION, "solar_frost_protection", MQTT_SUB_STATE},
     {MB_INPUT_SOLAR_HIGH_LIMIT, "solar_high_limit", MQTT_SUB_TEMP},
     {MB_INPUT_PUMP_FLOWRATE_MODE, "pump_flowrate", MQTT_SUB_STATE},
     {MB_INPUT_LIQUID_TYPE, "liquid_type", MQTT_SUB_SYS},
@@ -181,10 +183,12 @@ static const mqtt_name_t mqtt_names[] = {
     {MB_INPUT_SOLAR_WATER_PUMP, "solar_water_pump", MQTT_SUB_STATE},
     {MB_INPUT_ALARM_STATE, "alarm_state", MQTT_SUB_STATE},
     {MB_INPUT_ADC_AIN, "adc_ain", MQTT_SUB_SYS},
-    {MB_INPUT_ADC_NTC1, "adc_ntc1", MQTT_SUB_SYS},
-    {MB_INPUT_ADC_NTC2, "adc_ntc2", MQTT_SUB_SYS},
+    {MB_INPUT_ADC_NTC1, "adc_ntc1", MQTT_SUB_TEMP},
+    {MB_INPUT_ADC_NTC2, "adc_ntc2", MQTT_SUB_TEMP},
     {MB_INPUT_DS18B20_TEMP, "ds18b20", MQTT_SUB_TEMP}
 };
+
+
 
 
 // Remove unused define
@@ -369,7 +373,7 @@ esp_err_t mqtt_client_publish_data(void) {
     const char *template_topic = "%s/%s/%s";
     
     for(size_t i = 0; i < sizeof(mqtt_names) / sizeof(mqtt_name_t); i++) {
-        snprintf(topic, sizeof(topic), template_topic, MQTT_TOPIC_BASE, mqtt_names[i].subtopic, mqtt_names[i].name);
+        snprintf(topic, sizeof(topic), template_topic, MQTT_TOPIC_BASE, mqtt_subtopics[mqtt_names[i].subtopic], mqtt_names[i].name);
         snprintf(value, sizeof(value), "%d", mb_input_registers[mqtt_names[i].reg_addr]);
         ret = mqtt_publish_value(topic, value) || ret;
     }
