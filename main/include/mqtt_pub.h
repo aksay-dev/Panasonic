@@ -46,10 +46,33 @@ bool mqtt_client_is_connected(void);
  */
 esp_err_t mqtt_client_publish_data(void);
 
+/**
+ * @brief Update MQTT client state based on WiFi connection
+ * Stops MQTT when WiFi disconnects, starts when WiFi connects
+ * @return ESP_OK on success
+ */
+esp_err_t mqtt_client_update_wifi_state(void);
+
+typedef enum {
+    MQTT_SUB_SYS,
+    MQTT_SUB_TEMP,
+    MQTT_SUB_FLOW,
+    MQTT_SUB_STATE,
+    MQTT_SUB_POWER,
+    MQTT_SUB_FREQ,
+    MQTT_SUB_HOUR,
+    MQTT_SUB_COUNT,
+    MQTT_SUB_SPEED,
+    MQTT_SUB_PRESS,
+    MQTT_SUB_CURRENT,
+    MQTT_SUB_DUTY,
+    MQTT_SUB_ERROR
+} mqtt_subtopic_t;
+
 typedef struct {
     uint16_t reg_addr;
     const char *name;
-    const char *subtopic;
+    mqtt_subtopic_t subtopic;
 } mqtt_name_t;
 
 #ifdef __cplusplus

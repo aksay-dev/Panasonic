@@ -17,6 +17,7 @@
 #include "esp_err.h"
 #include "esp_mac.h"
 #include "esp_random.h"
+#include "wifi_connect.h"
 #include <string.h>
 #include <stdio.h>
 
@@ -224,7 +225,12 @@ static void mqtt_event_handler(void *handler_args, esp_event_base_t base, int32_
             break;
 
         case MQTT_EVENT_DISCONNECTED:
-            ESP_LOGI(TAG, "MQTT Disconnected");
+            // Only log if WiFi is still connected (unexpected disconnect)
+            if (wifi_connect_is_connected()) {
+                ESP_LOGW(TAG, "MQTT Disconnected (WiFi still connected)");
+            } else {
+                ESP_LOGD(TAG, "MQTT Disconnected (WiFi disconnected)");
+            }
             mqtt_connected = false;
             break;
 
@@ -246,9 +252,14 @@ static void mqtt_event_handler(void *handler_args, esp_event_base_t base, int32_
             break;
 
         case MQTT_EVENT_ERROR:
-            ESP_LOGE(TAG, "MQTT error occurred");
-            if (event->error_handle) {
-                ESP_LOGE(TAG, "Error type: %d", event->error_handle->error_type);
+            // Only log as warning if WiFi is not connected (expected error)
+            if (!wifi_connect_is_connected()) {
+                ESP_LOGW(TAG, "MQTT error (WiFi disconnected)");
+            } else {
+                ESP_LOGE(TAG, "MQTT error occurred");
+                if (event->error_handle) {
+                    ESP_LOGE(TAG, "Error type: %d", event->error_handle->error_type);
+                }
             }
             mqtt_connected = false;
             break;
@@ -346,13 +357,18 @@ bool mqtt_client_is_connected(void) {
  * @brief Publish a single value to MQTT
  */
 static esp_err_t mqtt_publish_value(const char *topic, const char *value) {
-    if (!mqtt_connected || mqtt_client == NULL) {
+    if (!mqtt_connected || mqtt_client == NULL || !wifi_connect_is_connected()) {
         return ESP_ERR_INVALID_STATE;
     }
 
     int msg_id = esp_mqtt_client_publish(mqtt_client, topic, value, 0, CONFIG_MQTT_QOS_LEVEL, CONFIG_MQTT_RETAIN);
     if (msg_id < 0) {
-        ESP_LOGE(TAG, "Failed to publish to %s", topic);
+        // Only log as warning if WiFi is disconnected (expected)
+        if (!wifi_connect_is_connected()) {
+            ESP_LOGW(TAG, "Failed to publish to %s (WiFi disconnected)", topic);
+        } else {
+            ESP_LOGE(TAG, "Failed to publish to %s", topic);
+        }
         return ESP_FAIL;
     }
 
@@ -363,7 +379,7 @@ static esp_err_t mqtt_publish_value(const char *topic, const char *value) {
  * @brief Publish heat pump data to MQTT
  */
 esp_err_t mqtt_client_publish_data(void) {
-    if (!mqtt_connected || mqtt_client == NULL) {
+    if (!mqtt_connected || mqtt_client == NULL || !wifi_connect_is_connected()) {
         return ESP_ERR_INVALID_STATE;
     }
 
@@ -380,4 +396,3 @@ esp_err_t mqtt_client_publish_data(void) {
 
     return ret;
 }
-

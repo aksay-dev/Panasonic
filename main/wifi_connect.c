@@ -7,6 +7,7 @@
 
 #include "include/wifi_connect.h"
 #include "include/project_config.h"
+#include "include/mqtt_pub.h"
 #include "esp_log.h"
 #include "esp_err.h"
 #include "esp_wifi.h"
