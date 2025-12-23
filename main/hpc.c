@@ -19,6 +19,7 @@
 #include "include/wifi_connect.h"
 #include "include/adc.h"
 #include "include/ds18b20a.h"
+#include "include/http_server.h"
 
 // test_decoder disabled
 
@@ -94,15 +95,23 @@ esp_err_t hpc_init(void) {
 esp_err_t hpc_start(void) {
     esp_err_t ret;
     
-    // Start WiFi connection first (required for MQTT)
+    // Start WiFi connection first (required for MQTT and HTTP server)
     ret = wifi_connect_start();
     if (ret != ESP_OK) {
-        ESP_LOGW(TAG, "Failed to start WiFi: %s (MQTT will not work)", esp_err_to_name(ret));
-        // Continue anyway - WiFi/MQTT are optional
+        ESP_LOGW(TAG, "Failed to start WiFi: %s (MQTT and HTTP server will not work)", esp_err_to_name(ret));
+        // Continue anyway - WiFi/MQTT/HTTP are optional
     } else {
         char ip_str[16];
         if (wifi_connect_get_ip(ip_str, sizeof(ip_str)) == ESP_OK) {
             ESP_LOGI(TAG, "WiFi connected, IP: %s", ip_str);
+            
+            // Start HTTP server
+            ret = http_server_start();
+            if (ret != ESP_OK) {
+                ESP_LOGW(TAG, "Failed to start HTTP server: %s", esp_err_to_name(ret));
+            } else {
+                ESP_LOGI(TAG, "HTTP server started on http://%s", ip_str);
+            }
         }
     }
     

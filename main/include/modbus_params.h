@@ -334,11 +334,18 @@ extern "C" {
 #define MB_INPUT_ADC_NTC1               0x0191  // GPIO34
 #define MB_INPUT_ADC_NTC2               0x0192  // GPIO35
 
-// DS18B20 temperature sensor (0x0193)
-#define MB_INPUT_DS18B20_TEMP           0x0193  // GPIO22, temperature in °C * 100
+// DS18B20 temperature sensor (0x0193-0x019A)
+#define MB_INPUT_DS18B20_TEMP           0x0193  // GPIO22, sensor #1, temperature in °C * 100
+#define MB_INPUT_DS18B20_TEMP2          0x0194  // sensor #2
+#define MB_INPUT_DS18B20_TEMP3          0x0195  // sensor #3
+#define MB_INPUT_DS18B20_TEMP4          0x0196  // sensor #4
+#define MB_INPUT_DS18B20_TEMP5          0x0197  // sensor #5
+#define MB_INPUT_DS18B20_TEMP6          0x0198  // sensor #6
+#define MB_INPUT_DS18B20_TEMP7          0x0199  // sensor #7
+#define MB_INPUT_DS18B20_TEMP8          0x019A  // sensor #8
 
 // Total input registers
-#define MB_REG_INPUT_COUNT             0x0194  // 404 registers (0x0000-0x0193)
+#define MB_REG_INPUT_COUNT             0x019B  // 411 registers (0x0000-0x019A)
 
 // ============================================================================
 // HOLDING REGISTERS (Read/Write) - 0x1000-0x103F

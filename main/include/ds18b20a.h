@@ -31,6 +31,11 @@ extern "C" {
 #define DS18B20_UPDATE_INTERVAL_MS 1000
 
 /**
+ * @brief Maximum supported DS18B20 sensors on the bus
+ */
+#define DS18B20_MAX_SENSORS 8
+
+/**
  * @brief DS18B20 resolution (9-12 bits)
  * 12-bit resolution provides 0.0625°C precision
  */

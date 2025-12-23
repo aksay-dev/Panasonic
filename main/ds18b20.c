@@ -21,15 +21,35 @@ static const char *TAG = "DS18B20";
 // 1-Wire bus handle
 static onewire_bus_handle_t onewire_bus = NULL;
 
-// DS18B20 device handle
-static ds18b20_device_handle_t ds18b20_device = NULL;
+// DS18B20 device handles
+static ds18b20_device_handle_t ds18b20_devices[DS18B20_MAX_SENSORS] = {0};
+static size_t ds18b20_device_count = 0;
 
 // Task handle
 static TaskHandle_t ds18b20_task_handle = NULL;
 static bool ds18b20_initialized = false;
 
-// Current temperature value (in °C * 100)
-static int16_t current_temperature = 0;
+// Current temperature values (in °C * 100) for each sensor
+static int16_t current_temperatures[DS18B20_MAX_SENSORS] = {0};
+
+// Modbus register map for DS18B20 sensors
+static const uint16_t ds18b20_reg_addrs[DS18B20_MAX_SENSORS] = {
+    MB_INPUT_DS18B20_TEMP,
+    MB_INPUT_DS18B20_TEMP2,
+    MB_INPUT_DS18B20_TEMP3,
+    MB_INPUT_DS18B20_TEMP4,
+    MB_INPUT_DS18B20_TEMP5,
+    MB_INPUT_DS18B20_TEMP6,
+    MB_INPUT_DS18B20_TEMP7,
+    MB_INPUT_DS18B20_TEMP8
+};
+
+static void write_temp_to_register(uint16_t reg_addr, int16_t value) {
+    if (reg_addr >= MB_REG_INPUT_START && reg_addr < MB_REG_INPUT_START + MB_REG_INPUT_COUNT) {
+        uint16_t reg_index = reg_addr - MB_REG_INPUT_START;
+        mb_input_registers[reg_index] = value;
+    }
+}
 
 /**
  * @brief DS18B20 reading task
@@ -42,47 +62,42 @@ static void ds18b20_task(void *pvParameters) {
     const TickType_t interval = pdMS_TO_TICKS(DS18B20_UPDATE_INTERVAL_MS);
     
     while (1) {
-        if (onewire_bus != NULL && ds18b20_device != NULL) {
-            float temperature = 0.0f;
-            
+        if (onewire_bus != NULL && ds18b20_device_count > 0) {
             // Trigger temperature conversion for all sensors on the bus
             esp_err_t ret = ds18b20_trigger_temperature_conversion_for_all(onewire_bus);
             if (ret != ESP_OK) {
                 ESP_LOGW(TAG, "Failed to trigger temperature conversion: %s", esp_err_to_name(ret));
+                // mark all as invalid
+                for (size_t i = 0; i < ds18b20_device_count; i++) {
+                    current_temperatures[i] = INT16_MIN;
+                    write_temp_to_register(ds18b20_reg_addrs[i], INT16_MIN);
+                }
             } else {
                 // Wait for conversion to complete (750ms for 12-bit resolution)
                 vTaskDelay(pdMS_TO_TICKS(800));
-                
-                // Read temperature from DS18B20
-                ret = ds18b20_get_temperature(ds18b20_device, &temperature);
-                
-                if (ret == ESP_OK) {
-                    // Convert to int16_t * 100 format (same as other temperature registers)
-                    int16_t temp_x100 = (int16_t)(temperature * 100.0f);
-                    current_temperature = temp_x100;
-                    
-                    // Update Modbus register
-                    uint16_t reg_addr = MB_INPUT_DS18B20_TEMP;
-                    if (reg_addr >= MB_REG_INPUT_START && reg_addr < MB_REG_INPUT_START + MB_REG_INPUT_COUNT) {
-                        uint16_t reg_index = reg_addr - MB_REG_INPUT_START;
-                        mb_input_registers[reg_index] = temp_x100;
+
+                for (size_t i = 0; i < ds18b20_device_count; i++) {
+                    float temperature = 0.0f;
+                    ret = ds18b20_get_temperature(ds18b20_devices[i], &temperature);
+                    if (ret == ESP_OK) {
+                        int16_t temp_x100 = (int16_t)(temperature * 100.0f);
+                        current_temperatures[i] = temp_x100;
+                        write_temp_to_register(ds18b20_reg_addrs[i], temp_x100);
+                        ESP_LOGD(TAG, "DS18B20[%d] temperature: %.2f°C (raw: %d)", (int)i, temperature, temp_x100);
+                    } else {
+                        ESP_LOGW(TAG, "Failed to read DS18B20[%d]: %s", (int)i, esp_err_to_name(ret));
+                        current_temperatures[i] = INT16_MIN;
+                        write_temp_to_register(ds18b20_reg_addrs[i], INT16_MIN);
                     }
-                    
-                    ESP_LOGD(TAG, "DS18B20 temperature: %.2f°C (raw: %d)", 
-                             temperature, temp_x100);
-                } else {
-                    ESP_LOGW(TAG, "Failed to read DS18B20 temperature: %s", esp_err_to_name(ret));
-                    // Set invalid value on error
-                    current_temperature = INT16_MIN;
-                    uint16_t reg_addr = MB_INPUT_DS18B20_TEMP;
-                    if (reg_addr >= MB_REG_INPUT_START && reg_addr < MB_REG_INPUT_START + MB_REG_INPUT_COUNT) {
-                        uint16_t reg_index = reg_addr - MB_REG_INPUT_START;
-                        mb_input_registers[reg_index] = INT16_MIN;
-                    }
+                }
+
+                // For non-present sensors (if fewer than max) write invalid
+                for (size_t i = ds18b20_device_count; i < DS18B20_MAX_SENSORS; i++) {
+                    write_temp_to_register(ds18b20_reg_addrs[i], INT16_MIN);
                 }
             }
         } else {
-            ESP_LOGW(TAG, "DS18B20 device not initialized");
+            ESP_LOGW(TAG, "DS18B20 devices not initialized");
         }
         
         // Wait for next update interval
@@ -139,29 +154,31 @@ esp_err_t ds18b20_init(void) {
     
     ESP_LOGI(TAG, "Device iterator created, start searching...");
     
-    // Search for DS18B20 device
+    // Search for DS18B20 devices (up to DS18B20_MAX_SENSORS)
     esp_err_t search_result = ESP_OK;
     do {
         search_result = onewire_device_iter_get_next(iter, &next_onewire_device);
         if (search_result == ESP_OK) {
-            // Try to create DS18B20 device from found device
             ds18b20_config_t ds_cfg = {};  // Empty config uses defaults
             
-            ret = ds18b20_new_device_from_enumeration(&next_onewire_device, &ds_cfg, &ds18b20_device);
+            if (ds18b20_device_count >= DS18B20_MAX_SENSORS) {
+                ESP_LOGW(TAG, "Maximum DS18B20 sensors (%d) reached, skipping extra devices", DS18B20_MAX_SENSORS);
+                continue;
+            }
+            
+            ret = ds18b20_new_device_from_enumeration(&next_onewire_device, &ds_cfg, &ds18b20_devices[ds18b20_device_count]);
             if (ret == ESP_OK) {
-                // Found DS18B20 device
                 onewire_device_address_t address;
-                ds18b20_get_device_address(ds18b20_device, &address);
-                ESP_LOGI(TAG, "Found DS18B20, address: %016llX", address);
+                ds18b20_get_device_address(ds18b20_devices[ds18b20_device_count], &address);
+                ESP_LOGI(TAG, "Found DS18B20[%d], address: %016llX", (int)ds18b20_device_count, address);
                 
-                // Set resolution to 12 bits
-                ret = ds18b20_set_resolution(ds18b20_device, DS18B20_RESOLUTION_12B);
+                ret = ds18b20_set_resolution(ds18b20_devices[ds18b20_device_count], DS18B20_RESOLUTION_12B);
                 if (ret != ESP_OK) {
                     ESP_LOGW(TAG, "Failed to set DS18B20 resolution: %s", esp_err_to_name(ret));
                 }
                 
                 device_found = true;
-                break;
+                ds18b20_device_count++;
             } else {
                 ESP_LOGD(TAG, "Found unknown device, address: %016llX", next_onewire_device.address);
             }
@@ -172,16 +189,19 @@ esp_err_t ds18b20_init(void) {
     onewire_del_device_iter(iter);
     
     if (!device_found) {
-        ESP_LOGE(TAG, "DS18B20 device not found on 1-Wire bus");
+        ESP_LOGE(TAG, "DS18B20 devices not found on 1-Wire bus");
         onewire_bus_del(onewire_bus);
         onewire_bus = NULL;
         return ESP_ERR_NOT_FOUND;
     }
     
-    ESP_LOGI(TAG, "DS18B20 initialized successfully with %d-bit resolution", DS18B20_RESOLUTION_BITS);
+    ESP_LOGI(TAG, "DS18B20 initialized successfully with %d device(s), %d-bit resolution", (int)ds18b20_device_count, DS18B20_RESOLUTION_BITS);
     
     ds18b20_initialized = true;
-    current_temperature = 0;
+    for (size_t i = 0; i < DS18B20_MAX_SENSORS; i++) {
+        current_temperatures[i] = 0;
+        write_temp_to_register(ds18b20_reg_addrs[i], INT16_MIN);
+    }
     
     return ESP_OK;
 }
@@ -246,6 +266,7 @@ esp_err_t ds18b20_get_cached_temperature(int16_t *temperature) {
         return ESP_ERR_INVALID_ARG;
     }
     
-    *temperature = current_temperature;
+    // Return first sensor value if available
+    *temperature = (ds18b20_device_count > 0) ? current_temperatures[0] : INT16_MIN;
     return ESP_OK;
 }
